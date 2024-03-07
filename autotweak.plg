@@ -1,0 +1,76 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+<!ENTITY name		"autotweak">
+<!ENTITY author		"fuzzy01">
+<!ENTITY version	"2024.03.06">
+<!ENTITY launch		"Settings/AutoTweak">
+<!ENTITY gitURL 	"https://raw.githubusercontent.com/&author;/&name;/master">
+<!ENTITY pluginURL	"&gitURL;/&name;.plg">
+<!ENTITY md5		"80918061ccf785545d45618f107d84cd">
+]>
+
+<PLUGIN	name="&name;"
+		author="&author;"
+		version="&version;"
+		launch="&launch;"
+		pluginURL="&pluginURL;"
+		icon="gear"
+		min="6.12.0">
+
+<CHANGES>
+
+##&name;
+###&version;
+- First release.
+
+</CHANGES>
+
+<!-- PRE-INSTALL SCRIPT -->
+
+<FILE Run="/bin/bash">
+<INLINE>
+rm -f $(ls /boot/config/plugins/&name;/&name;*.tgz 2>/dev/null &#124; grep -v '&version;')
+</INLINE>
+</FILE>
+
+<!-- SOURCE PACKAGE -->
+
+<FILE Name="/boot/config/plugins/&name;/&name;-&version;.tgz">
+<URL>"&gitURL;/&name;-&version;.tgz"</URL>
+<MD5>&md5;</MD5>
+</FILE>
+
+<!-- POST-INSTALL SCRIPT -->
+
+<FILE Run="/bin/bash">
+<INLINE>
+mkdir /usr/local/emhttp/plugins/&name;
+tar -xf /boot/config/plugins/&name;/&name;-&version;.tgz -C /usr/local/emhttp/plugins/&name; 2>/dev/null
+ln -sf /usr/local/emhttp/plugins/&name;/scripts/autotweak /usr/local/sbin 2>/dev/null
+
+echo ""
+echo "-----------------------------------------------------------"
+echo " Plugin &name; is installed."
+echo " Copyright 2024, &author;"
+echo " Version: &version;"
+echo "-----------------------------------------------------------"
+echo ""
+
+</INLINE>
+</FILE>
+
+<!-- REMOVE SCRIPT -->
+
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+echo "-----------------------------------------------------------"
+echo " Uninstalling &name;..."
+echo "-----------------------------------------------------------"
+
+rm -f /usr/local/sbin/autotweak
+rm -rf /usr/local/emhttp/plugins/&name;
+rm -rf /boot/config/plugins/&name;
+
+</INLINE>
+</FILE>
+</PLUGIN>

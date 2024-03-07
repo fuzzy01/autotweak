@@ -1,0 +1,114 @@
+Menu="Utilities"
+Title="AutoTweak"
+Icon="gear"
+---
+<?php
+/* This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * For the complete terms of the GNU General Public License, please see this URL:
+ * http://www.gnu.org/licenses/gpl-3.0.html
+ *
+ * Copyright (c) 2024, Peter Laszlo
+ */
+?>
+<?
+$plugin = "autotweak";
+
+function parse_autotweak_cfg($plugin) {
+    global $docroot;
+    $def = "$docroot/plugins/$plugin/default.cfg";
+    $flash = "/boot/config/plugins/$plugin/$plugin.cfg";
+    $cfg = file_exists($def) ? parse_ini_file($def) : [];
+    return file_exists($flash) ? array_replace_recursive($cfg, parse_ini_file($flash)) : $cfg;
+}
+
+$cfg = parse_autotweak_cfg($plugin);
+
+?>
+
+:autotweak_main_plug:
+> This plugin enables you to adjust your Unraid system's power profile to enhance performance or improve energy efficiency. 
+> Additionally, it fine-tunes the TCP stack settings and network interface card (NIC) interrupt affinities to optimize network performance. 
+> Please note: This plugin is not compatible with other plugins that alter the same settings.
+:end
+
+<div class='spinner' style='display:none'></div>
+
+<form markdown="1" name="autotweak" method="POST" action="/update.php" target="progressFrame">
+<input type="hidden" name="#file" value="<?php echo $plugin; ?>/<?php echo $plugin; ?>.cfg">
+<input type="hidden" name="#command" value="/plugins/<?php echo $plugin; ?>/scripts/<?php echo $plugin; ?>">
+<input type="hidden" name="#arg[1]" value="apply">
+
+_(Power Profile)_:
+: <select name="POWER_PROFILE">
+    <?=mk_option($cfg['POWER_PROFILE'], "performance", "_(Performance)_");?>
+    <?=mk_option($cfg['POWER_PROFILE'], "balanced", "_(Balanced)_");?>
+    <?=mk_option($cfg['POWER_PROFILE'], "powersave", "_(Power Save)_");?>
+    <?=mk_option($cfg['POWER_PROFILE'], "powersupersave", "_(Power Super Save)_");?>
+  </select>
+
+:autotweak_power_profile_plug:
+> Select the power profile for your system. By selecting a profile, you can influence the balance between performance and power consumption according to your needs or preferences.
+:end
+
+
+_(ASPM Policy)_:
+: <select name="ASPM_POLICY">
+    <?=mk_option($cfg['ASPM_POLICY'], "default", "_(BIOS Default)_");?>
+    <?=mk_option($cfg['ASPM_POLICY'], "performance", "_(Performance: ASPM Disabled)_");?>
+    <?=mk_option($cfg['ASPM_POLICY'], "powersave", "_(Power Save: ASPM L1)_");?>
+    <?=mk_option($cfg['ASPM_POLICY'], "powersupersave", "_(Power Super Save: ASPM L0s L1+)_");?>
+  </select>
+
+:autotweak_aspm_policy_plug:
+> This setting allows you to configure the Active State Power Management (ASPM) policy for PCIe devices. 
+> ASPM is a power management feature that adjusts the power usage of PCIe devices based on system activity and can significantly reduce power consumption when enabled.
+> Select a policy from the options below to define how the ASPM should behave. 
+> Please note that modifying this setting may impact the performance and power consumption of your PCIe devices. Make sure to understand the implications of each policy before applying the changes.
+> Warning: Be aware that changing the ASPM policy can affect system stability and performance. It is recommended to monitor the system after applying any changes and revert back if any undesirable behavior is observed.
+:end
+
+<input type="submit" value="Apply">
+<input type="button" value="Done" onclick="done()">
+</form>
+
+<div class='spinner' style='display:none'></div>
+
+<?
+
+$output = shell_exec("bash -c " . escapeshellarg("plugins/{$plugin}/scripts/{$plugin} aspm_diag"));
+$lines = explode(PHP_EOL, $output);
+
+echo "<pre>";
+foreach ($lines as $line) {
+    // Highlight words
+    $line = preg_replace('/(ASPM L1 Enabled)/i', '<span style="color: green; font-weight: bold;">$1</span>', $line);
+    $line = preg_replace('/(ASPM Disabled)/i', '<span style="color: red; font-weight: bold;">$1</span>', $line);
+    if (preg_match('/^\s*L1SubCap:/i', $line)) {
+      $line = preg_replace('/(ASPM_L1\S*)/i', '<span style="color: orange; font-weight: bold;">$1</span>', $line);
+    } 
+    else if (preg_match('/^\s*L1SubCtl1:/i', $line)) {
+      $line = preg_replace('/(ASPM_L1\S*+)/i', '<span style="color: green; font-weight: bold;">$1</span>', $line);      
+      $line = preg_replace('/(ASPM_L1\S*-)/i', '<span style="color: red; font-weight: bold;">$1</span>', $line);      
+    }
+    $line = preg_replace('/(ASPM L1)(?=,)/i', '<span style="color: orange; font-weight: bold;">$1</span>', $line);
+    $line = preg_replace('/(ASPM L0s L1)(?=,)/i', '<span style="color: orange; font-weight: bold;">$1</span>', $line);
+    // Make it easier to read
+    $line = preg_replace('/(LnkCap:\s*)/i', 'Capabilities: ', $line);
+    $line = preg_replace('/(LnkCtl:\s*)/i', 'Settings: ', $line);
+    $line = preg_replace('/(L1SubCap:\s*)/i', 'PM Capabilities: ', $line);
+    $line = preg_replace('/(L1SubCtl1:\s*)/i', 'PM Settings: ', $line);
+
+    echo $line . "<br>";
+}
+echo "</pre>";
+
+?>
