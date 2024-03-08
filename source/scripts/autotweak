@@ -60,16 +60,56 @@ set_cpu_performance_preference() {
     return 1
   fi
 
-  # Iterate through each energy_performance_preference file and write the preference into it
-  for file in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
-    local cpu_number=$(echo "$file" | grep -oP 'cpu\K\d+')
-    if [ -w "$file" ]; then
-      echo "$preference" > "$file"
-      log "Set performance preference to $preference for CPU $cpu_number"
-    else
-      log "Cannot write to $file, might require root privileges."
-    fi
-  done
+  if [ -f "/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference" ]; then
+
+    # Iterate through each energy_performance_preference file and write the preference into it
+    for file in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
+      local cpu_number=$(echo "$file" | grep -oP 'cpu\K\d+')
+      if [ -w "$file" ]; then
+        echo "$preference" > "$file"
+        log "Set performance preference to $preference for CPU $cpu_number"
+      else
+        log "Cannot write to $file, might require root privileges."
+      fi
+    done
+
+  elif [ -f "/sys/devices/system/cpu/cpu0/power/energy_perf_bias" ]; then
+
+    # Convert performance to EBP value
+    local bias
+    case $preference  in
+      'power')
+        bias=15
+        ;;
+      'balance_power')
+        bias=8
+        ;;
+      'balance_performance')
+        bias=4
+        ;;
+      'performance')
+        bias=0
+        ;;
+      'default')
+        bias=6
+        ;;
+      esac
+
+    # Iterate through each energy_perf_bias file and write the bias into it
+    for file in /sys/devices/system/cpu/cpu*/power/energy_perf_bias; do
+      local cpu_number=$(echo "$file" | grep -oP 'cpu\K\d+')
+      if [ -w "$file" ]; then
+        echo "$bias" > "$file"
+        log "Set performance bias to $preference $bias for CPU $cpu_number"
+      else
+        log "Cannot write to $file, might require root privileges."
+      fi
+    done
+
+  else
+    log "Performance preference feature is not supported on this CPU"
+    return 1
+  fi
 }
 
 set_hwp_dynamic_boost() {
