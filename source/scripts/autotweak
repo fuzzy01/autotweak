@@ -130,7 +130,7 @@ set_aspm_policy() {
   local policy=$1
 
   if [ -z "$policy" ]; then
-    echo "Usage: set_aspm_policy <policy>"
+    echo "Usage: set_aspm_policy [policy]"
     echo "Available policies: default, performance, powersave, powersupersave"
     return 1
   fi
@@ -172,6 +172,64 @@ set_aspm_feature() {
   # Writing the value to the specified ASPM feature file
   echo "$value" > "$feature_path"
   log "ASPM feature '$feature' set to '$value' for device $device"
+}
+
+set_pci_power_control() {
+    if [ $# -lt 2 ]; then
+        echo "Usage: set_pci_power_control [control_stata] [banned_drivers]"
+        echo "control_state: 'auto' or 'on'"
+        echo "banned_drivers: Comma-separated list of drivers to exclude (e.g., 'driver1,driver2')"
+        return 1
+    fi
+
+    local control_state="$1"
+    local banned_drivers_str="$2"
+
+    # Check if the provided control state is valid
+    if [[ "$control_state" != "auto" && "$control_state" != "on" ]]; then
+        echo "Invalid control state: $control_state. Allowed values are 'auto' and 'on'."
+        return 1
+    fi
+
+    # Convert the comma-separated list of banned drivers into an array
+    IFS=',' read -r -a banned_drivers <<< "$banned_drivers_str"
+
+    local device_driver
+    for device_dir in /sys/bus/pci/devices/*; do
+        if [ ! -d "$device_dir" ]; then
+            continue
+        fi
+
+        local device=$(basename "$device_dir")
+        local power_state_file="${device_dir}/power_state"
+        local control_file="${device_dir}/power/control"
+        local driver_link="${device_dir}/driver"
+
+        if [ ! -f "$power_state_file" ] || [ ! -f "$control_file" ] || [ ! -L "$driver_link" ]; then
+            continue
+        fi
+
+        # Extract the driver name and check if it's in the banned list
+        local device_driver=$(readlink "$driver_link")
+        local device_driver=$(basename "$device_driver")
+
+        if [[ " ${banned_drivers[*]} " =~ " $device_driver " ]]; then
+            log "Skipping device $device with banned driver: $device_driver"
+            continue
+        fi
+
+        local power_state=$(cat "$power_state_file")
+        if [ "$power_state" != "unknown" ]; then
+          # Check if the file exists and is writable
+          if [ -w "$control_file" ]; then
+            echo "$control_state" > "$control_file"
+            log "PCIe PM control set to '$control_state' for device $device"
+          else
+            log "Cannot write to $control_file, might require root privileges."
+            return 1
+          fi
+        fi
+    done
 }
 
 #
@@ -362,8 +420,8 @@ set_rtl8125_interrupt_affinity() {
       break
     fi
 
-    log "Setting CPU affinity of interrupt $irq and rx queue $queue_num of $interface to CPU ${cpu_array[$current_cpu_index]}"
     echo ${cpu_array[$current_cpu_index]} > /proc/irq/"$irq"/smp_affinity_list
+    log "Set CPU affinity of interrupt $irq and rx queue $queue_num of $interface to CPU ${cpu_array[$current_cpu_index]}"
 
     queue_num=$((queue_num + 1))
 
@@ -412,9 +470,9 @@ set_rtl8125_interrupt_affinity() {
     done
     local cpu_mask_hex=$(printf "%x" $cpu_mask)
     
-    log "Setting CPU affinity of interrupt $irq and tx queue $queue_num of $interface to CPU $cpu_str"
     echo $cpu_mask_hex > /proc/irq/"$irq"/smp_affinity
     echo $cpu_mask_hex > /sys/class/net/"$interface"/queues/tx-$queue_num/xps_cpus
+    log "Set CPU affinity of interrupt $irq and tx queue $queue_num of $interface to CPU $cpu_str"
 
     queue_num=$((queue_num + 1))
   done
@@ -482,9 +540,9 @@ set_intel_nic_interrupt_affinity() {
       break
     fi
 
-    log "Setting CPU affinity of interrupt $irq and rx queue $queue_num of $interface to CPU ${cpu_array[$current_cpu_index]}"
     echo ${cpu_array[$current_cpu_index]} > /proc/irq/"$irq"/smp_affinity_list
     printf "%x" $((1 << ${cpu_array[$current_cpu_index]})) > /sys/class/net/"$interface"/queues/tx-$queue_num/xps_cpus
+    log "Set CPU affinity of interrupt $irq and rx queue $queue_num of $interface to CPU ${cpu_array[$current_cpu_index]}"
 
     queue_num=$((queue_num + 1))
 
@@ -645,9 +703,10 @@ optimize_tcp() {
   log "TCP parameters optimized"
 }
 
+pm_diag () {
+  lspci -vv 2>/dev/null | awk '/Power Management.*?/{print $0}' RS= | grep --color -P '(^[a-z0-9:.]+|D0[+-]*|D1[+-]*|D2[+-]*|D3[a-z+-]*|ASPM.*?abled|ASPM_[^ ]*|ASPM L[^,]*)'
 
-aspm_diag () {
-  lspci -vv 2>/dev/null | awk '/ASPM.*?abled/{print $0}' RS= | grep --color -P '(^[a-z0-9:.]+|ASPM.*?abled|ASPM_[^ ]*|ASPM L[^,]*)'
+  lspci -vv 2>/dev/null | awk '/Power Management.*?/{print $0}' RS= | grep -P '(^[a-z0-9:.]+|Flags:|Status:.*PME-Enable|LnkCap:|LnkCtl:|LnkSta:|L1SubCap:|L1SubCtl1:)'
 }
 
 #
@@ -679,6 +738,10 @@ apply () {
   set_no_turbo 0
   
   set_aspm_policy "$ASPM_POLICY"
+
+  if [ "$PCI_PM_CONTROL" != "default" ]; then
+    set_pci_power_control "$PCI_PM_CONTROL" "$PCI_PM_BANNED"
+  fi
 
   optimize_nic_interrupt_affinity
 

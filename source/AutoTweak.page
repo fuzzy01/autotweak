@@ -46,6 +46,7 @@ $cfg = parse_autotweak_cfg($plugin);
 <input type="hidden" name="#file" value="<?php echo $plugin; ?>/<?php echo $plugin; ?>.cfg">
 <input type="hidden" name="#command" value="/plugins/<?php echo $plugin; ?>/scripts/<?php echo $plugin; ?>">
 <input type="hidden" name="#arg[1]" value="apply">
+<input type="hidden" name="PCI_PM_BANNED" value="<?=$cfg['PCI_PM_BANNED']?>">
 
 _(Power Profile)_:
 : <select name="POWER_PROFILE">
@@ -76,6 +77,21 @@ _(ASPM Policy)_:
 > Warning: Be aware that changing the ASPM policy can affect system stability and performance. It is recommended to monitor the system after applying any changes and revert back if any undesirable behavior is observed.
 :end
 
+_(PCI PM Control)_:
+: <select name="PCI_PM_CONTROL">
+    <?=mk_option($cfg['PCI_PM_CONTROL'], "default", "_(OS Default)_");?>
+    <?=mk_option($cfg['PCI_PM_CONTROL'], "auto", "_(Enable)_");?>
+    <?=mk_option($cfg['PCI_PM_CONTROL'], "on", "_(Disable)_");?>
+  </select>
+
+:autotweak_pci_pm_control_plug:
+> This setting allows you to set the power control state for PCI devices on your system. 
+> If enabled the system automatically adjusts the power state of the PCI devices based on the current usage and activity, optimizing for energy efficiency without significantly compromising performance.
+> If disabled the PCI devices are kept in their maximum power state to ensure maximum performance, regardless of usage or activity.
+> Please note that changes will take effect immediately and will apply to all compatible PCI devices detected by the system.
+> Warning: Be aware that changing this setting can affect system stability and performance. It is recommended to monitor the system after applying any changes and revert back if any undesirable behavior is observed.
+:end
+
 <input type="submit" value="Apply">
 <input type="button" value="Done" onclick="done()">
 </form>
@@ -84,7 +100,7 @@ _(ASPM Policy)_:
 
 <?
 
-$output = shell_exec("bash -c " . escapeshellarg("plugins/{$plugin}/scripts/{$plugin} aspm_diag"));
+$output = shell_exec("bash -c " . escapeshellarg("lspci -vv 2>/dev/null | awk '/D3hot\+|ASPM/{print $0}' RS= | grep -P '(^[a-z0-9:.]+|Flags:|Status:.*PME-Enable|LnkCap:|LnkCtl:|LnkSta:|L1SubCap:|L1SubCtl1:)'"));
 $lines = explode(PHP_EOL, $output);
 
 echo "<pre>";
@@ -101,11 +117,13 @@ foreach ($lines as $line) {
     }
     $line = preg_replace('/(ASPM L1)(?=,)/i', '<span style="color: orange; font-weight: bold;">$1</span>', $line);
     $line = preg_replace('/(ASPM L0s L1)(?=,)/i', '<span style="color: orange; font-weight: bold;">$1</span>', $line);
+    $line = preg_replace('/(D0[+-]*|D1[+-]*|D2[+-]*|D3[a-z+-]*)/i', '<span style="color: orange; font-weight: bold;">$1</span>', $line);
     // Make it easier to read
     $line = preg_replace('/(LnkCap:\s*)/i', 'Capabilities: ', $line);
     $line = preg_replace('/(LnkCtl:\s*)/i', 'Settings: ', $line);
-    $line = preg_replace('/(L1SubCap:\s*)/i', 'PM Capabilities: ', $line);
-    $line = preg_replace('/(L1SubCtl1:\s*)/i', 'PM Settings: ', $line);
+    $line = preg_replace('/(LnkSta:\s*)/i', 'Status: ', $line);
+    $line = preg_replace('/(L1SubCap:\s*)/i', 'ASPM Capabilities: ', $line);
+    $line = preg_replace('/(L1SubCtl1:\s*)/i', 'ASPM Settings: ', $line);
 
     echo $line . "<br>";
 }
