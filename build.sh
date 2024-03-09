@@ -16,14 +16,26 @@
 # Copyright (c) 2024, Peter Laszlo
 #
 
-plugin_version="2024.03.06"
+plugin_version=${1:-"dev"}
 
-tar czvf "autotweak-$plugin_version.tgz" -C ./source .  
-new_md5=$(md5 -q "autotweak-$plugin_version.tgz")
+# Check the operating system
+os_name=$(uname)
 
-sed -i '' "s/<!ENTITY md5[[:space:]]*\".*\">/<!ENTITY md5\t\t\"$new_md5\">/" autotweak.plg
-sed -i '' "s/<!ENTITY version[[:space:]]*\".*\">/<!ENTITY version\t\"$plugin_version\">/" autotweak.plg
-
-
-
-
+if [ "$os_name" = "Darwin" ]; then
+    # macOS commands
+    mkdir build
+    tar czvf "build/autotweak-$plugin_version.tgz" -C ./source .
+    new_md5=$(md5 -q "build/autotweak-$plugin_version.tgz")
+    cp autotweak.plg build/autotweak.plg
+    sed -i '' "s/<!ENTITY md5[[:space:]]*\".*\">/<!ENTITY md5\t\t\"$new_md5\">/" build/autotweak.plg
+    sed -i '' "s/<!ENTITY version[[:space:]]*\".*\">/<!ENTITY version\t\"$plugin_version\">/" build/autotweak.plg
+elif [ "$os_name" = "Linux" ]; then
+    # Linux commands
+    mkdir build
+    tar czvf "build/autotweak-$plugin_version.tgz" -C ./source .
+    new_md5=$(md5sum "build/autotweak-$plugin_version.tgz" | cut -d ' ' -f 1)
+    sed -i "s/<!ENTITY md5[[:space:]]*\".*\">/<!ENTITY md5\t\t\"$new_md5\">/" build/autotweak.plg
+    sed -i "s/<!ENTITY version[[:space:]]*\".*\">/<!ENTITY version\t\"$plugin_version\">/" build/autotweak.plg
+else
+    echo "Unsupported OS: $os_name"
+fi
