@@ -17,6 +17,7 @@
 #
 
 plugin_version=${1:-"dev"}
+echo "Building version: $plugin_version"
 
 # Check the operating system
 os_name=$(uname)
@@ -29,13 +30,16 @@ if [ "$os_name" = "Darwin" ]; then
     cp autotweak.plg build/autotweak.plg
     sed -i '' "s/<!ENTITY md5[[:space:]]*\".*\">/<!ENTITY md5\t\t\"$new_md5\">/" build/autotweak.plg
     sed -i '' "s/<!ENTITY version[[:space:]]*\".*\">/<!ENTITY version\t\"$plugin_version\">/" build/autotweak.plg
+    ls -l build
 elif [ "$os_name" = "Linux" ]; then
     # Linux commands
     mkdir build
     tar czvf "build/autotweak-$plugin_version.tgz" -C ./source .
     new_md5=$(md5sum "build/autotweak-$plugin_version.tgz" | cut -d ' ' -f 1)
+    cp autotweak.plg build/autotweak.plg
     sed -i "s/<!ENTITY md5[[:space:]]*\".*\">/<!ENTITY md5\t\t\"$new_md5\">/" build/autotweak.plg
     sed -i "s/<!ENTITY version[[:space:]]*\".*\">/<!ENTITY version\t\"$plugin_version\">/" build/autotweak.plg
+    ls -l build
 else
     echo "Unsupported OS: $os_name"
 fi

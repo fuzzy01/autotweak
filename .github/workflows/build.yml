@@ -1,0 +1,14 @@
+name: CI
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint Bash Scripts
+        run: |
+          find . -type f -iname "*.sh" -exec shellcheck {} +
+      - name: Lint PHP Files
+        run: |
+          composer global require "squizlabs/php_codesniffer=*"
+          find . -type f -iname "*.page" -exec php -l {} \;

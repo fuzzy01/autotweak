@@ -4,7 +4,7 @@
 <!ENTITY author		"fuzzy01">
 <!ENTITY version	"dev">
 <!ENTITY launch		"Settings/AutoTweak">
-<!ENTITY gitURL 	"https://github.com/&author;/&name;/archive/refs/tags">
+<!ENTITY gitURL 	"https://github.com/&author;/&name;/releases/download/&version;">
 <!ENTITY pluginURL	"&gitURL;/&name;.plg">
 <!ENTITY md5		"4d664b2c98daee944f449c1d86104980">
 ]>

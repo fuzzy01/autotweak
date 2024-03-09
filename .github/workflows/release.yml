@@ -1,23 +1,24 @@
-name: CI
+name: CI on Release
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:
+  release:
+    types: [created]
+permissions:
+    contents: write
 jobs:
-  build:
+  build-and-release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set Tag Name
+        run: echo "TAG_NAME=${{ github.event.release.tag_name }}" >> $GITHUB_ENV
       - name: Build
         run: ./build.sh ${{ github.event.release.tag_name }}
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           generate_release_notes: true
-          make_latest: true
-          files:
+          files: |
             build/autotweak-${{ github.event.release.tag_name }}.tgz
             build/autotweak.plg
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}         
