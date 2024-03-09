@@ -65,8 +65,8 @@ _(ASPM Policy)_:
 : <select name="ASPM_POLICY">
     <?=mk_option($cfg['ASPM_POLICY'], "default", "_(BIOS Default)_");?>
     <?=mk_option($cfg['ASPM_POLICY'], "performance", "_(Performance: ASPM Disabled)_");?>
-    <?=mk_option($cfg['ASPM_POLICY'], "powersave", "_(Power Save: ASPM L1)_");?>
-    <?=mk_option($cfg['ASPM_POLICY'], "powersupersave", "_(Power Super Save: ASPM L0s L1+)_");?>
+    <?=mk_option($cfg['ASPM_POLICY'], "powersave", "_(Power Save: ASPM L0s L1)_");?>
+    <?=mk_option($cfg['ASPM_POLICY'], "powersupersave", "_(Power Super Save: ASPM L0s L1 L1+)_");?>
   </select>
 
 :autotweak_aspm_policy_plug:
