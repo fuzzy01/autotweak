@@ -112,13 +112,13 @@ set_cpu_performance_preference() {
   fi
 }
 
-set_hwp_dynamic_boost() {
+set_dynamic_boost() {
   local value=$1
 
   # Check if the input is provided and valid (0 or 1)
   if [ -z "$value" ]; then
-    echo "Usage: set_hwp_dynamic_boost [value]"
-    echo "value: The value for hwp_dynamic_boost (0 or 1)"
+    echo "Usage: set_dynamic_boost [value]"
+    echo "value: The value for dynamic boost (0 or 1)"
     return 1
   fi
 
@@ -129,14 +129,34 @@ set_hwp_dynamic_boost() {
 
   local file="/sys/devices/system/cpu/intel_pstate/hwp_dynamic_boost"
 
-  # Check if the file exists and is writable
-  if [ -w "$file" ]; then
-    echo "$value" > "$file"
-    log "Set hwp_dynamic_boost to $value"
-  else
-    log "Cannot write to $file, might require root privileges."
-    return 1
+  if [ -f "$file" ]; then
+    # Check if the file is writable
+    if [ -w "$file" ]; then
+      echo "$value" > "$file"
+      log "Set HWP Dynamic Boost to $value"
+      return 0
+    else
+      log "Cannot write to $file, might require root privileges."
+      return 1
+    fi
   fi
+
+  file="/sys/devices/system/cpu/amd_pstate/cppc_dynamic_boost"
+
+  if [ -f "$file" ]; then
+    # Check if the file is writable
+    if [ -w "$file" ]; then
+      echo "$value" > "$file"
+      log "Set CPPC Dynamic Boost to $value"
+      return 0
+    else
+      log "Cannot write to $file, might require root privileges."
+      return 1
+    fi
+  fi
+
+  log "Dynamic Boost is not supported by the CPU"
+  return 1
 }
 
 set_no_turbo() {
@@ -156,14 +176,37 @@ set_no_turbo() {
 
   local file="/sys/devices/system/cpu/intel_pstate/no_turbo"
 
-  # Check if the file exists and is writable
-  if [ -w "$file" ]; then
-    echo "$value" > "$file"
-    log "Set no_turbo to $value"
-  else
-    log "Cannot write to $file, might require root privileges."
-    return 1
+  if [ -f "$file" ]; then
+    # Check if the file is writable
+    if [ -w "$file" ]; then
+      echo "$value" > "$file"
+      log "Set no_turbo to $value"
+      return 0
+    else
+      log "Cannot write to $file, might require root privileges."
+      return 1
+    fi
   fi
+
+  # Try legacy boost knob
+  file="/sys/devices/system/cpu/cpufreq/boost"
+  
+  if [ -f "$file" ]; then
+    value=$((value == 1 ? 0 : 1)) 
+
+    # Check if the file is writable
+    if [ -w "$file" ]; then
+      echo "$value" > "$file"
+      log "Set boost to $value"
+      return 0
+    else
+      log "Cannot write to $file, might require root privileges."
+      return 1
+    fi
+  fi
+
+  log "Turbo/Boost is not supported by the CPU"
+  return 1
 }
 
 set_aspm_policy() {
@@ -182,12 +225,20 @@ set_aspm_policy() {
     return 1
   fi
 
-  # Set the ASPM policy
-  echo "$policy" > /sys/module/pcie_aspm/parameters/policy
-  if [ $? -eq 0 ]; then
-    log "ASPM policy set to $policy"
+  local file="/sys/module/pcie_aspm/parameters/policy" 
+
+  # Check if the file is writable
+  if [ -w "$file" ]; then
+    # Set the ASPM policy
+    echo "$policy" > "$file"
+    if [ $? -eq 0 ]; then
+      log "ASPM policy set to $policy"
+    else
+      log "Failed to set ASPM policy"
+      return 1
+    fi
   else
-    log "Failed to set ASPM policy"
+    log "Cannot write to $file, might require root privileges."
     return 1
   fi
 }
@@ -774,7 +825,7 @@ apply () {
       set_cpu_performance_preference "power"
   esac
 
-  set_hwp_dynamic_boost 1
+  set_dynamic_boost 1
   set_no_turbo 0
   
   set_aspm_policy "$ASPM_POLICY"
