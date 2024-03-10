@@ -4,8 +4,7 @@
 <!ENTITY author		"fuzzy01">
 <!ENTITY version	"dev">
 <!ENTITY launch		"Settings/AutoTweak">
-<!ENTITY gitURL 	"https://github.com/&author;/&name;/releases/download/&version;">
-<!ENTITY pluginURL	"&gitURL;/&name;.plg">
+<!ENTITY pluginURL	"https://github.com/&author;/&name;/releases/latest/download/&name;.plg">
 <!ENTITY md5		"4d664b2c98daee944f449c1d86104980">
 ]>
 
@@ -36,7 +35,7 @@ rm -f $(ls /boot/config/plugins/&name;/&name;*.tgz 2>/dev/null &#124; grep -v '&
 <!-- SOURCE PACKAGE -->
 
 <FILE Name="/boot/config/plugins/&name;/&name;-&version;.tgz">
-<URL>"&gitURL;/&name;-&version;.tgz"</URL>
+<URL>"https://github.com/&author;/&name;/releases/download/&version;/&name;-&version;.tgz"</URL>
 <MD5>&md5;</MD5>
 </FILE>
 
