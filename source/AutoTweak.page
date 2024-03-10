@@ -106,7 +106,7 @@ $lines = explode(PHP_EOL, $output);
 echo "<pre>";
 foreach ($lines as $line) {
     // Highlight words
-    $line = preg_replace('/(ASPM L1 Enabled)/i', '<span style="color: green; font-weight: bold;">$1</span>', $line);
+    $line = preg_replace('/(ASPM L0s L1 Enabled|ASPM L1 Enabled)/i', '<span style="color: green; font-weight: bold;">$1</span>', $line);
     $line = preg_replace('/(ASPM Disabled)/i', '<span style="color: red; font-weight: bold;">$1</span>', $line);
     if (preg_match('/^\s*L1SubCap:/i', $line)) {
       $line = preg_replace('/(ASPM_L1\S*)/i', '<span style="color: orange; font-weight: bold;">$1</span>', $line);
@@ -117,6 +117,7 @@ foreach ($lines as $line) {
     }
     $line = preg_replace('/(ASPM L1)(?=,)/i', '<span style="color: orange; font-weight: bold;">$1</span>', $line);
     $line = preg_replace('/(ASPM L0s L1)(?=,)/i', '<span style="color: orange; font-weight: bold;">$1</span>', $line);
+    $line = preg_replace('/(ASPM not supported)/i', '<span style="color: red; font-weight: bold;">$1</span>', $line);
     $line = preg_replace('/(D0[+-]*|D1[+-]*|D2[+-]*|D3[a-z+-]*)/i', '<span style="color: orange; font-weight: bold;">$1</span>', $line);
     // Make it easier to read
     $line = preg_replace('/(LnkCap:\s*)/i', 'Capabilities: ', $line);
