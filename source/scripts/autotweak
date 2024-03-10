@@ -45,7 +45,7 @@ set_scaling_governor() {
       echo "$governor" > "$file"
       log "Set scaling governor to $governor for CPU $cpu_number"
     else
-      log "Cannot write to $file, might require root privileges."
+      log "Cannot write to $file, might require root privileges"
     fi
   done
 }
@@ -69,7 +69,7 @@ set_cpu_performance_preference() {
         echo "$preference" > "$file"
         log "Set performance preference to $preference for CPU $cpu_number"
       else
-        log "Cannot write to $file, might require root privileges."
+        log "Cannot write to $file, might require root privileges"
       fi
     done
 
@@ -102,7 +102,7 @@ set_cpu_performance_preference() {
         echo "$bias" > "$file"
         log "Set performance bias to $preference $bias for CPU $cpu_number"
       else
-        log "Cannot write to $file, might require root privileges."
+        log "Cannot write to $file, might require root privileges"
       fi
     done
 
@@ -123,7 +123,7 @@ set_dynamic_boost() {
   fi
 
   if [[ "$value" != "0" && "$value" != "1" ]]; then
-    echo "Error: invalid value: $value. Only '0' or '1' are allowed."
+    echo "Error: invalid value: $value. Only '0' or '1' are allowed"
     return 1
   fi
 
@@ -136,7 +136,7 @@ set_dynamic_boost() {
       log "Set HWP Dynamic Boost to $value"
       return 0
     else
-      log "Cannot write to $file, might require root privileges."
+      log "Cannot write to $file, might require root privileges"
       return 1
     fi
   fi
@@ -150,7 +150,7 @@ set_dynamic_boost() {
       log "Set CPPC Dynamic Boost to $value"
       return 0
     else
-      log "Cannot write to $file, might require root privileges."
+      log "Cannot write to $file, might require root privileges"
       return 1
     fi
   fi
@@ -170,7 +170,7 @@ set_no_turbo() {
   fi
 
   if [[ "$value" != "0" && "$value" != "1" ]]; then
-    echo "Error: invalid value: $value. Only '0' or '1' are allowed."
+    echo "Error: invalid value: $value. Only '0' or '1' are allowed"
     return 1
   fi
 
@@ -183,7 +183,7 @@ set_no_turbo() {
       log "Set no_turbo to $value"
       return 0
     else
-      log "Cannot write to $file, might require root privileges."
+      log "Cannot write to $file, might require root privileges"
       return 1
     fi
   fi
@@ -200,7 +200,7 @@ set_no_turbo() {
       log "Set boost to $value"
       return 0
     else
-      log "Cannot write to $file, might require root privileges."
+      log "Cannot write to $file, might require root privileges"
       return 1
     fi
   fi
@@ -238,7 +238,7 @@ set_aspm_policy() {
       return 1
     fi
   else
-    log "Cannot write to $file, might require root privileges."
+    log "Cannot write to $file, might require root privileges"
     return 1
   fi
 }
@@ -256,7 +256,7 @@ set_aspm_feature() {
   fi
 
   if [ ! -w "$feature_path" ]; then
-    log "Cannot write to $feature_path. Make sure the device and ASPM feature exist and you have proper permissions."
+    log "Cannot write to $feature_path, might require root privileges"
     return 1
   fi
 
@@ -278,7 +278,7 @@ set_pci_power_control() {
 
     # Check if the provided control state is valid
     if [[ "$control_state" != "auto" && "$control_state" != "on" ]]; then
-        echo "Invalid control state: $control_state. Allowed values are 'auto' and 'on'."
+        echo "Invalid control state: $control_state. Allowed values are 'auto' and 'on'"
         return 1
     fi
 
@@ -316,7 +316,7 @@ set_pci_power_control() {
             echo "$control_state" > "$control_file"
             log "PCIe PM control set to '$control_state' for device $device"
           else
-            log "Cannot write to $control_file, might require root privileges."
+            log "Cannot write to $control_file, might require root privileges"
             return 1
           fi
         fi
@@ -460,14 +460,14 @@ set_rtl8125_interrupt_affinity() {
   fi
 
   if ! [[ $first_cpu =~ ^[0-9]+$ ]]; then
-    echo "Error: $first_cpu is not a number."
+    echo "Error: $first_cpu is not a number"
     return 1
   fi
 
   local cpu_array=($(get_usable_cpu_list "$interface" "$banned_cpus"))
 
   if [ ${#cpu_array[@]} -eq 0 ]; then
-    log "No available CPUs after filtering banned ones."
+    log "No available CPUs after filtering banned ones"
     return 1
   fi
 
@@ -488,18 +488,18 @@ set_rtl8125_interrupt_affinity() {
   local irq_count=${#interrupts[@]}
 
   if [ "$irq_count" -eq 0 ]; then
-    log "No interrupts found for interface $interface."
+    log "No interrupts found for interface $interface"
     return 1
   fi
 
   # Check for valid rtl8125 interrupt configuration
   if [  "$irq_count" -lt 32 ]; then
-    log "Unknown RTL8125 interrupt configuration for interface $interface."
+    log "Unknown RTL8125 interrupt configuration for interface $interface"
     return 1
   fi
 
   if [ "$irq_count" -lt "$rx_queue_count" ]; then
-    log "The number of interrupts $irq_count is less than the number of rx queues ($rx_queue_count) for interface $interface."
+    log "The number of interrupts $irq_count is less than the number of rx queues ($rx_queue_count) for interface $interface"
     return 1
   fi
 
@@ -533,7 +533,7 @@ set_rtl8125_interrupt_affinity() {
   elif [ "$tx_queue_count" -eq 2 ]; then
     tx_interrupts=("${interrupts[16]}" "${interrupts[18]}")  
   else
-    log "Unknown RTL8125 tx queue configuration for interface $interface."
+    log "Unknown RTL8125 tx queue configuration for interface $interface"
     # Return no error as we already assigned rx queues to CPU cores
     echo "${cpu_array[$current_cpu_index]}"
     return 0
@@ -586,14 +586,14 @@ set_intel_nic_interrupt_affinity() {
   fi
 
   if ! [[ $first_cpu =~ ^[0-9]+$ ]]; then
-    echo "Error: $first_cpu is not a number."
+    echo "Error: $first_cpu is not a number"
     return 1
   fi
 
   local cpu_array=($(get_usable_cpu_list "$interface" "$banned_cpus"))
  
   if [ ${#cpu_array[@]} -eq 0 ]; then
-    log "No available CPUs after filtering banned ones."
+    log "No available CPUs after filtering banned ones"
     return 1
   fi
 
@@ -614,12 +614,12 @@ set_intel_nic_interrupt_affinity() {
   local irq_count=${#interrupts[@]}
 
   if [ "$irq_count" -eq 0 ]; then
-    log "No interrupts found for interface $interface."
+    log "No interrupts found for interface $interface"
     return 1
   fi
 
   if [ "$irq_count" -lt "$rx_queue_count" ]; then
-    log "The number of interrupts irq_count is less than the number of rx queues ($rx_queue_count) for interface $interface."
+    log "The number of interrupts irq_count is less than the number of rx queues ($rx_queue_count) for interface $interface"
     return 1
   fi
 
@@ -652,7 +652,7 @@ get_nic_type() {
   local interface=$1
 
   if [ -z "$interface" ]; then
-    echo "Usage: get_nic_vendor <interface>"
+    echo "Usage: get_nic_vendor [interface]"
     return 1
   fi
 
@@ -660,7 +660,7 @@ get_nic_type() {
   local pci_location=$(cat /sys/class/net/"$interface"/device/uevent | grep -oP 'PCI_SLOT_NAME=\K.*')
  
   if [ -z "$pci_location" ]; then
-    log "Could not determine the PCI location of $interface."
+    log "Could not determine the PCI location of $interface"
     return 1
   fi
 
@@ -671,7 +671,7 @@ get_nic_type() {
     echo "$vendor"
     return 0
   else
-    log "Vendor information not found for $interface."
+    log "Vendor information not found for $interface"
     return 1
   fi
 }
@@ -784,7 +784,7 @@ optimize_tcp() {
       sysctl -w nnet.ipv4.tcp_slow_start_after_idle=0 > /dev/null   
       ;;
      *)
-      echo "No specific optimization for this speed."
+      echo "No specific optimization for this speed: $max_speed Mb/s"
       ;;
     esac  
 
@@ -847,7 +847,7 @@ executeFunction() {
       # Call the function passing all remaining command line arguments
       $func_name "$@"
   else
-      echo "Error: Function '$func_name' not found."
+      echo "Error: Function '$func_name' not found"
       exit 1
   fi
 }
