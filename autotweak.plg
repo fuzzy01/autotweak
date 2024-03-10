@@ -47,6 +47,7 @@ rm -f $(ls /boot/config/plugins/&name;/&name;*.tgz 2>/dev/null &#124; grep -v '&
 mkdir /usr/local/emhttp/plugins/&name;
 tar -xf /boot/config/plugins/&name;/&name;-&version;.tgz -C /usr/local/emhttp/plugins/&name; 2>/dev/null
 ln -sf /usr/local/emhttp/plugins/&name;/scripts/autotweak /usr/local/sbin 2>/dev/null
+/usr/local/emhttp/plugins/&name;/scripts/autotweak apply 
 
 echo ""
 echo "-----------------------------------------------------------"
@@ -66,11 +67,16 @@ echo ""
 echo "-----------------------------------------------------------"
 echo " Uninstalling &name;..."
 echo "-----------------------------------------------------------"
+echo ""
+
+/usr/local/emhttp/plugins/&name;/scripts/autotweak unapply 
 
 rm -f /usr/local/sbin/autotweak
 rm -rf /usr/local/emhttp/plugins/&name;
 rm -rf /boot/config/plugins/&name;
 
+echo ""
+echo "Uninstallation complete. Please reboot your system to fully restore all settings to their default state."
 </INLINE>
 </FILE>
 </PLUGIN>

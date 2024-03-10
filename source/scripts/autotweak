@@ -796,8 +796,6 @@ optimize_tcp() {
 
 pm_diag () {
   lspci -vv 2>/dev/null | awk '/Power Management.*?/{print $0}' RS= | grep --color -P '(^[a-z0-9:.]+|D0[+-]*|D1[+-]*|D2[+-]*|D3[a-z+-]*|ASPM.*?abled|ASPM_[^ ]*|ASPM L[^,]*)'
-
-  lspci -vv 2>/dev/null | awk '/Power Management.*?/{print $0}' RS= | grep -P '(^[a-z0-9:.]+|Flags:|Status:.*PME-Enable|LnkCap:|LnkCtl:|LnkSta:|L1SubCap:|L1SubCtl1:)'
 }
 
 #
@@ -813,7 +811,12 @@ apply () {
       set_cpu_performance_preference "performance"
       ;;
     "balanced")
-      set_scaling_governor "powersave"
+      file="/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors"
+      if [ -r "$file" ] && grep -q "ondemand" "$file"; then
+        set_scaling_governor "ondemand"
+      else
+        set_scaling_governor "powersave"
+      fi
       set_cpu_performance_preference "balance_performance"
       ;;
     "powersave")
@@ -839,6 +842,19 @@ apply () {
   optimize_tcp
 }
 
+unapply () {
+  log "Unappply autotweak settings"
+  
+  set_scaling_governor "performance"
+  set_cpu_performance_preference "performance"
+  set_dynamic_boost 0
+  set_aspm_policy "default"
+
+  # Disable TCP MTU Probing
+  sysctl -w net.ipv4.tcp_mtu_probing=0 > /dev/null
+}
+
+
 executeFunction() {
   local func_name=$1
   shift  # Remove the first argument (function name), leaving only the function's arguments
@@ -862,11 +878,11 @@ fi
 CONFIG="/boot/config/plugins/autotweak/autotweak.cfg"
 
 # Check if the file exists and is readable
-if [ ! -f "$CONFIG" ]; then
-  echo "POWER_PROFILE=\"powersave\"" > "$CONFIG"
+if [ -r "$CONFIG" ]; then
+  source "$CONFIG"
+else
+  source /usr/local/emhttp/plugins/autotweak/default.cfg
 fi
-
-source "$CONFIG"
 
 # Execute the function with all arguments
 executeFunction "$@"
