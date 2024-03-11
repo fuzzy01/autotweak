@@ -16,6 +16,8 @@
 # Copyright (c) 2024, Peter Laszlo
 #
 
+declare -A first_cpu_map
+
 log() {
     local message=$1
 
@@ -464,21 +466,13 @@ set_rtl8125_interrupt_affinity() {
     return 1
   fi
 
+  # Usable CPUs
   local cpu_array=($(get_usable_cpu_list "$interface" "$banned_cpus"))
 
   if [ ${#cpu_array[@]} -eq 0 ]; then
     log "No available CPUs after filtering banned ones"
     return 1
   fi
-
-  # Find first CPU
-  local first_cpu_index=0
-  for i in "${!cpu_array[@]}"; do
-    if [[ "${cpu_array[$i]}" -ge "$first_cpu" ]]; then
-      first_cpu_index=$i
-      break
-    fi
-  done
 
   # RX queue count
   local rx_queue_count=$(ls -d /sys/class/net/"$interface"/queues/rx-* | wc -l)
@@ -502,6 +496,15 @@ set_rtl8125_interrupt_affinity() {
     log "The number of interrupts $irq_count is less than the number of rx queues ($rx_queue_count) for interface $interface"
     return 1
   fi
+
+  # Find first CPU
+  local first_cpu_index=0
+  for i in "${!cpu_array[@]}"; do
+    if [[ "${cpu_array[$i]}" -ge "$first_cpu" ]]; then
+      first_cpu_index=$i
+      break
+    fi
+  done
 
   # Set the CPU affinity for each interrupt for rx queues, cycling through available CPU cores
   local queue_num=0
@@ -590,21 +593,13 @@ set_intel_nic_interrupt_affinity() {
     return 1
   fi
 
+  # Usable CPUs
   local cpu_array=($(get_usable_cpu_list "$interface" "$banned_cpus"))
  
   if [ ${#cpu_array[@]} -eq 0 ]; then
     log "No available CPUs after filtering banned ones"
     return 1
   fi
-
-  # Find first CPU
-  local first_cpu_index=0
-  for i in "${!cpu_array[@]}"; do
-    if [[ "${cpu_array[$i]}" -ge "$first_cpu" ]]; then
-      first_cpu_index=$i
-      break
-    fi
-  done
 
   # RX queue count
   local rx_queue_count=$(ls -d /sys/class/net/"$interface"/queues/rx-* | wc -l)
@@ -623,6 +618,15 @@ set_intel_nic_interrupt_affinity() {
     return 1
   fi
 
+  # Find first CPU
+  local first_cpu_index=0
+  for i in "${!cpu_array[@]}"; do
+    if [[ "${cpu_array[$i]}" -ge "$first_cpu" ]]; then
+      first_cpu_index=$i
+      break
+    fi
+  done
+
   # Set the CPU affinity for each interrupt for rx queues, cycling through available CPU cores
   local queue_num=0
   local current_cpu_index=$first_cpu_index
@@ -633,7 +637,7 @@ set_intel_nic_interrupt_affinity() {
 
     echo ${cpu_array[$current_cpu_index]} > /proc/irq/"$irq"/smp_affinity_list
     printf "%x" $((1 << ${cpu_array[$current_cpu_index]})) > /sys/class/net/"$interface"/queues/tx-$queue_num/xps_cpus
-    log "Set CPU affinity of interrupt $irq and rx queue $queue_num of $interface to CPU ${cpu_array[$current_cpu_index]}"
+    log "Set CPU affinity of interrupt $irq and rx/tx queue $queue_num of $interface to CPU ${cpu_array[$current_cpu_index]}"
 
     queue_num=$((queue_num + 1))
 
@@ -643,6 +647,82 @@ set_intel_nic_interrupt_affinity() {
       current_cpu_index=0
     fi
   done
+
+  echo "${cpu_array[$current_cpu_index]}"
+  return 0
+}
+
+set_generic_nic_interrupt_affinity() {
+  local interface=$1
+  local first_cpu=$2
+  local banned_cpus=$3
+
+  if [[ -z "$interface" || -z "$first_cpu"  || -z "$banned_cpus" ]]; then
+    echo "Usage: set_generic_nic_interrupt_affinity [interface] [first_cpu] [banned_cpus]"
+    echo "interface: Network interface (e.g., eth0)"
+    echo "first_cpu: First CPU to assign the interrupt"
+    echo "banned_cpus: Comma-separated list of CPUs to exclude (e.g., 0,1)"
+    return 1
+  fi
+
+  if ! [[ $first_cpu =~ ^[0-9]+$ ]]; then
+    echo "Error: $first_cpu is not a number"
+    return 1
+  fi
+
+  # Usable CPUs
+  local cpu_array=($(get_usable_cpu_list "$interface" "$banned_cpus"))
+ 
+  if [ ${#cpu_array[@]} -eq 0 ]; then
+    log "No available CPUs after filtering banned ones"
+    return 1
+  fi
+
+  # RX queue count
+  local rx_queue_count=$(ls -d /sys/class/net/"$interface"/queues/rx-* | wc -l)
+
+  if [ "$rx_queue_count" -ne 1 ]; then
+    log "Unknown rx queue configuration for interface $interface"
+    return 1
+  fi
+
+   # Find the interrupt associated with the given network interface
+  local interrupts=($(grep -i "$interface" /proc/interrupts | awk '{print $1}' | tr -d ':'))
+  local irq_count=${#interrupts[@]}
+
+  if [ "$irq_count" -eq 0 ]; then
+    log "No interrupts found for interface $interface"
+    return 1
+  fi
+
+  if [ "$irq_count" -ne 1 ]; then
+    log "Unknown interrupt configuration for interface $interface"
+    return 1
+  fi
+
+  # Find first CPU
+  local first_cpu_index=0
+  for i in "${!cpu_array[@]}"; do
+    if [[ "${cpu_array[$i]}" -ge "$first_cpu" ]]; then
+      first_cpu_index=$i
+      break
+    fi
+  done
+
+  # Set the CPU affinity for the rx and tx queue
+  local queue_num=0
+  local current_cpu_index=$first_cpu_index
+  local irq="${interrupts[0]}"
+
+  echo ${cpu_array[$current_cpu_index]} > /proc/irq/"$irq"/smp_affinity_list
+  printf "%x" $((1 << ${cpu_array[$current_cpu_index]})) > /sys/class/net/"$interface"/queues/tx-$queue_num/xps_cpus
+  log "Set CPU affinity of interrupt $irq and rx/tx queue $queue_num of $interface to CPU ${cpu_array[$current_cpu_index]}"
+
+  # Prepare the next CPU, respecting the max CPU index
+  current_cpu_index=$((current_cpu_index + 1))
+  if [ $current_cpu_index -ge  ${#cpu_array[@]} ]; then
+    current_cpu_index=0
+  fi
 
   echo "${cpu_array[$current_cpu_index]}"
   return 0
@@ -676,9 +756,27 @@ get_nic_type() {
   fi
 }
 
-optimize_nic_interrupt_affinity() {
-  declare -A first_cpu_map
+get_nic_driver() {
+  local interface=$1
 
+  if [ -z "$interface" ]; then
+    echo "Usage: get_nic_vendor [interface]"
+    return 1
+  fi
+
+  # Get the driver of the network interface
+  local nic_driver=$(cat /sys/class/net/"$interface"/device/uevent | grep -oP 'DRIVER=\K.*')
+ 
+  if [ -n "$nic_driver" ]; then
+    echo "$nic_driver"
+    return 0
+  else
+    log "Could not determine the driver of $interface"
+    return 1
+  fi
+}
+
+optimize_nic_interrupt_affinity() {
   for interface in /sys/class/net/*; do
     # Extract just the interface name, not the full path
     local interface_name=$(basename "$interface")
@@ -689,22 +787,29 @@ optimize_nic_interrupt_affinity() {
     fi
 
     local numa_node=$(get_numa_node "$interface_name")
+    local first_cpu=${first_cpu_map[$numa_node]:-0}
 
+    local nic_driver=$(get_nic_driver "$interface_name")
     local nic_type=$(get_nic_type "$interface_name")
-    if [[ "$nic_type" =~ Realtek.*RTL8125  ]]; then
-      local first_cpu=${first_cpu_map[$numa_node]:-0}
-      local ret
+
+    local ret
+
+    if [[ "$nic_driver" == "r8125" ]]; then
       ret=$(set_rtl8125_interrupt_affinity "$interface_name" "$first_cpu" "0")
-      if [ $? -eq 0 ]; then
-        first_cpu_map[$numa_node]=$ret # Update first_cpu if there was no error
-      fi
     elif [[ "$nic_type" =~ Intel.* ]]; then
-      local ret
       ret=$(set_intel_nic_interrupt_affinity "$interface_name" "$first_cpu" "0")
-      if [ $? -eq 0 ]; then
-        first_cpu_map[$numa_node]=$ret  # Update first_cpu if there was no error
-      fi 
+      if [ $? -ne 0 ]; then
+        # Retry with generic
+        ret=$(set_generic_nic_interrupt_affinity "$interface_name" "$first_cpu" "0")
+      fi
+    else
+      ret=$(set_generic_nic_interrupt_affinity "$interface_name" "$first_cpu" "0")
     fi
+
+    if [ $? -eq 0 ]; then
+        first_cpu_map[$numa_node]=$ret  # Update first_cpu if there was no error
+    fi
+
   done
 }
 
