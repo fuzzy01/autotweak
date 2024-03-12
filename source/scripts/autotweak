@@ -365,7 +365,7 @@ get_numa_node() {
     fi
 }
 
-get_prefered_cpu_list() {
+get_prefered_cpus() {
   # Check for CPPC
   if [ ! -f "/sys/devices/system/cpu/cpu0/acpi_cppc/highest_perf" ]; then
     local present=$(cat "/sys/devices/system/cpu/present")
@@ -389,7 +389,7 @@ get_prefered_cpu_list() {
     fi
   done
 
-  e_cores=()
+  local e_cores=()
 
   for core_id in "${!core_perf_pairs[@]}"; do
     if [ "${core_perf_pairs[$core_id]}" -eq "$min_perf_value" ]; then
@@ -400,40 +400,25 @@ get_prefered_cpu_list() {
   echo "${e_cores[@]}"
 }
 
-get_usable_cpu_list() {
+get_usable_cpus() {
   local interface=$1
-  local banned_cpus=$1
+  local banned_cpu_array=("${@:2}")
 
   # Get CPUs associated with the interface
   local local_cpulist=$(cat /sys/class/net/"$interface"/device/local_cpulist)
   local local_cpu_array=($(expand_cpulist "$local_cpulist"))
 
   # Get prefered CPUs
-  local prefered_cpu_array=($(get_prefered_cpu_list))
-
-  # Convert the banned CPUs string into an array
-  local OIFS=$IFS
-  IFS=',' read -r -a banned_cpu_array <<< "$banned_cpus"
-  IFS=$OIFS
+  local prefered_cpu_array=($(get_prefered_cpus))
 
   is_banned_cpu() {
     local cpu=$1
-    for banned_cpu in "${banned_cpu_array[@]}"; do
-      if [[ "$cpu" -eq "$banned_cpu" ]]; then
-        return 0
-      fi
-    done
-    return 1
+    [[ " ${banned_cpu_array[@]} " =~ " ${cpu} " ]]
   }
 
   is_prefered_cpu() {
     local cpu=$1
-    for prefered_cpu in "${prefered_cpu_array[@]}"; do
-      if [[ "$cpu" -eq "$prefered_cpu" ]]; then
-        return 0
-      fi
-    done
-    return 1
+    [[ " ${prefered_cpu_array[@]} " =~ " ${cpu} " ]]
   }
 
   # Filter out banned and not prefered CPUs
@@ -444,33 +429,24 @@ get_usable_cpu_list() {
     fi
   done
 
-  log "Usable CPUs for $interface: ${cpu_array[*]}"
   echo "${cpu_array[@]}"
 }
 
 set_rtl8125_interrupt_affinity() {
   local interface=$1
   local first_cpu=$2
-  local banned_cpus=$3
+  local cpu_array=("${@:3}")
  
-  if [[ -z "$interface" || -z "$first_cpu"  || -z "$banned_cpus" ]]; then
-    echo "Usage: set_rtl8125_interrupt_affinity [interface] [first_cpu] [banned_cpus]"
+  if [[ -z "$interface" || -z "$first_cpu" || -z "${cpu_array[*]}" ]]; then
+    echo "Usage: set_rtl8125_interrupt_affinity [interface] [first_cpu] [cpu_array]"
     echo "interface: Network interface (e.g., eth0)"
     echo "first_cpu: First CPU to assign the first interrupt"
-    echo "banned_cpus: Comma-separated list of CPUs to exclude (e.g., 0,1)"
+    echo "cpu_array: Array of CPUs to use"
     return 1
   fi
 
   if ! [[ $first_cpu =~ ^[0-9]+$ ]]; then
     echo "Error: $first_cpu is not a number"
-    return 1
-  fi
-
-  # Usable CPUs
-  local cpu_array=($(get_usable_cpu_list "$interface" "$banned_cpus"))
-
-  if [ ${#cpu_array[@]} -eq 0 ]; then
-    log "No available CPUs after filtering banned ones"
     return 1
   fi
 
@@ -578,26 +554,18 @@ set_rtl8125_interrupt_affinity() {
 set_intel_nic_interrupt_affinity() {
   local interface=$1
   local first_cpu=$2
-  local banned_cpus=$3
+  local cpu_array=("${@:3}")
 
-  if [[ -z "$interface" || -z "$first_cpu"  || -z "$banned_cpus" ]]; then
-    echo "Usage: set_intel_nic_interrupt_affinity [interface] [first_cpu] [banned_cpus]"
+  if [[ -z "$interface" || -z "$first_cpu" || -z "${cpu_array[*]}" ]]; then
+    echo "Usage: set_intel_nic_interrupt_affinity [interface] [first_cpu] [cpu_array]"
     echo "interface: Network interface (e.g., eth0)"
     echo "first_cpu: First CPU to assign the first interrupt"
-    echo "banned_cpus: Comma-separated list of CPUs to exclude (e.g., 0,1)"
+    echo "cpu_array: Array of CPUs to use"
     return 1
   fi
 
   if ! [[ $first_cpu =~ ^[0-9]+$ ]]; then
     echo "Error: $first_cpu is not a number"
-    return 1
-  fi
-
-  # Usable CPUs
-  local cpu_array=($(get_usable_cpu_list "$interface" "$banned_cpus"))
- 
-  if [ ${#cpu_array[@]} -eq 0 ]; then
-    log "No available CPUs after filtering banned ones"
     return 1
   fi
 
@@ -655,26 +623,18 @@ set_intel_nic_interrupt_affinity() {
 set_generic_nic_interrupt_affinity() {
   local interface=$1
   local first_cpu=$2
-  local banned_cpus=$3
+  local cpu_array=("${@:3}")
 
-  if [[ -z "$interface" || -z "$first_cpu"  || -z "$banned_cpus" ]]; then
-    echo "Usage: set_generic_nic_interrupt_affinity [interface] [first_cpu] [banned_cpus]"
+  if [[ -z "$interface" || -z "$first_cpu" || -z "${cpu_array[*]}" ]]; then
+    echo "Usage: set_generic_nic_interrupt_affinity [interface] [first_cpu] [banned_cpu_array]"
     echo "interface: Network interface (e.g., eth0)"
     echo "first_cpu: First CPU to assign the interrupt"
-    echo "banned_cpus: Comma-separated list of CPUs to exclude (e.g., 0,1)"
+    echo "cpu_array: Array of CPUs to use"
     return 1
   fi
 
   if ! [[ $first_cpu =~ ^[0-9]+$ ]]; then
     echo "Error: $first_cpu is not a number"
-    return 1
-  fi
-
-  # Usable CPUs
-  local cpu_array=($(get_usable_cpu_list "$interface" "$banned_cpus"))
- 
-  if [ ${#cpu_array[@]} -eq 0 ]; then
-    log "No available CPUs after filtering banned ones"
     return 1
   fi
 
@@ -777,6 +737,9 @@ get_nic_driver() {
 }
 
 optimize_nic_interrupt_affinity() {
+  local -a banned_cpu_array=(0)
+
+
   for interface in /sys/class/net/*; do
     # Extract just the interface name, not the full path
     local interface_name=$(basename "$interface")
@@ -785,6 +748,16 @@ optimize_nic_interrupt_affinity() {
     if [ ! -d "/sys/class/net/$interface_name/device" ]; then
       continue
     fi
+
+    # Usable CPUs
+    local cpu_array=($(get_usable_cpus "$interface_name" "${banned_cpu_array[@]}"))
+ 
+    if [ ${#cpu_array[@]} -eq 0 ]; then
+      log "No available CPUs after filtering banned ones for interface $interface_name"
+      continue
+    fi
+
+    log "Usable CPUs for $interface_name: ${cpu_array[*]}"
 
     local numa_node=$(get_numa_node "$interface_name")
     local first_cpu=${first_cpu_map[$numa_node]:-0}
@@ -795,15 +768,15 @@ optimize_nic_interrupt_affinity() {
     local ret
 
     if [[ "$nic_driver" == "r8125" ]]; then
-      ret=$(set_rtl8125_interrupt_affinity "$interface_name" "$first_cpu" "0")
+      ret=$(set_rtl8125_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array[@]}")
     elif [[ "$nic_type" =~ Intel.* ]]; then
-      ret=$(set_intel_nic_interrupt_affinity "$interface_name" "$first_cpu" "0")
+      ret=$(set_intel_nic_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array[@]}")
       if [ $? -ne 0 ]; then
         # Retry with generic
-        ret=$(set_generic_nic_interrupt_affinity "$interface_name" "$first_cpu" "0")
+        ret=$(set_generic_nic_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array[@]}")
       fi
     else
-      ret=$(set_generic_nic_interrupt_affinity "$interface_name" "$first_cpu" "0")
+      ret=$(set_generic_nic_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array[@]}")
     fi
 
     if [ $? -eq 0 ]; then
