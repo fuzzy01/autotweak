@@ -46,6 +46,7 @@ $cfg = parse_autotweak_cfg($plugin);
 <input type="hidden" name="#file" value="<?php echo $plugin; ?>/<?php echo $plugin; ?>.cfg">
 <input type="hidden" name="#command" value="/plugins/<?php echo $plugin; ?>/scripts/<?php echo $plugin; ?>">
 <input type="hidden" name="#arg[1]" value="apply">
+<input type="hidden" name="NIC_IRQ_BANNED" value="<?=$cfg['NIC_IRQ_BANNED']?>">
 <input type="hidden" name="PCI_PM_BANNED" value="<?=$cfg['PCI_PM_BANNED']?>">
 
 _(Power Profile)_:

@@ -997,14 +997,16 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
+
+# Read default config
+source /usr/local/emhttp/plugins/autotweak/default.cfg
+
 # Read config
 CONFIG="/boot/config/plugins/autotweak/autotweak.cfg"
 
 # Check if the file exists and is readable
 if [ -r "$CONFIG" ]; then
   source "$CONFIG"
-else
-  source /usr/local/emhttp/plugins/autotweak/default.cfg
 fi
 
 # Execute the function with all arguments
