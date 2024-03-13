@@ -917,6 +917,157 @@ optimize_tcp() {
   log "TCP parameters optimized"
 }
 
+#
+# Kernel parameter functions
+#
+
+set_kernel_parameter() {
+    local paramName=$1
+    local paramValue=$2
+    local configFile="/boot/syslinux/syslinux.cfg"
+    local tempFile=$(mktemp)
+
+    # Check if the parameter name or value is empty
+    if [[ -z "$paramName" ]] || [[ -z "$paramValue" ]]; then
+        echo "Usage: add_kernel_parameter [parameter name] [parameter value]"
+        echo "Parameter name or value is missing."
+        return 1
+    fi
+
+    # Check if the configuration file exists
+    if [[ ! -f "$configFile" ]]; then
+        log "Configuration file does not exist at $configFile."
+        return 1
+    fi
+
+    # Use awk to either add or update the parameter in the kernel line
+    awk -v paramName="$paramName" -v paramValue="$paramValue" '
+    /label Unraid OS/ {
+        print;  # Print the "label" line
+        getline; print;  # Print the "menu" line
+        getline;  # Process the "kernel" line
+        if ($1 == "kernel") {
+            # Check if parameter is already in the line
+            if (index($0, paramName "=") > 0) {
+                # Parameter exists, replace its value
+                gsub(paramName "=[^ ]+", paramName "=" paramValue);
+            } else {
+                # Parameter doesnt exist, append it
+                $0 = $0 " " paramName "=" paramValue;
+            }
+            print;
+        } else {
+            print;
+        }
+        next;
+    }
+    { print }  # Print lines that do not match the "label Unraid OS" block
+    ' "$configFile" > "$tempFile"
+
+    # Check if changes were made. If so, update the configFile.
+    if ! cmp --silent "$tempFile" "$configFile"; then
+        log "Added kernel boot parameter: $paramName=$paramValue"
+        mv "$tempFile" "$configFile"
+    else
+        log "Kernel boot parameter is already set: $paramName=$paramValue"
+        rm "$tempFile"  # No change, so remove the temporary file
+    fi
+}
+
+remove_kernel_parameter() {
+    local paramName=$1
+    local configFile="/boot/syslinux/syslinux.cfg"
+    local tempFile=$(mktemp)
+
+    # Check if the parameter name or value is empty
+    if [[ -z "$paramName" ]]; then
+        echo "Usage: remove_kernel_parameter [parameter name]"
+        echo "Parameter name is missing."
+        return 1
+    fi
+
+    # Check if the configuration file exists
+    if [[ ! -f "$configFile" ]]; then
+        log "Configuration file does not exist at $configFile."
+        return 1
+    fi
+
+    # Use awk to either add or update the parameter in the kernel line
+    awk -v paramName="$paramName" -v paramValue="$paramValue" '
+    /label Unraid OS/ {
+        print;  # Print the "label" line
+        getline; print;  # Print the "menu" line
+        getline;  # Process the "kernel" line
+        if ($1 == "kernel") {
+            # Check if parameter is in the line
+            if (index($0, paramName "=") > 0) {
+                # Parameter exists, remove it
+                gsub(" " paramName "=[^ ]+", "");
+            }
+            print;
+        } else {
+            print;
+        }
+        next;
+    }
+    { print }  # Print lines that do not match the "label Unraid OS" block
+    ' "$configFile" > "$tempFile"
+
+    # Check if changes were made. If so, update the configFile.
+    if ! cmp --silent "$tempFile" "$configFile"; then
+        log "Removed kernel boot parameter: $paramName"
+        mv "$tempFile" "$configFile"
+    else
+        rm "$tempFile"  # No change, so remove the temporary file
+    fi
+}
+
+get_kernel_parameter() {
+    local paramName=$1
+    local configFile="/boot/syslinux/syslinux.cfg"
+
+    # Check if the parameter name or value is empty
+    if [[ -z "$paramName" ]]; then
+        echo "Usage: get_kernel_parameter [parameter name]"
+        echo "Parameter name is missing."
+        return 1
+    fi
+
+    # Check if the configuration file exists
+    if [[ ! -f "$configFile" ]]; then
+        log "Configuration file does not exist at $configFile."
+        return 1
+    fi
+
+    # Use awk to either add or update the parameter in the kernel line
+    local value
+    value=$(awk -v paramName="$paramName" '
+    BEGIN { foundParam = 0; }
+    /label Unraid OS/ {
+        getline; # Skip the "menu" line
+        getline;  # Process the "kernel" line
+        if ($1 == "kernel") {
+            # Check if parameter is in the line
+            regex = paramName "=([^[:space:]]+)";
+            if (match($0, regex, arr)) {
+                print arr[1];
+                foundParam = 1;
+                exit 0;
+            }              
+        } 
+        next;
+    }
+    END { if (foundParam == 0) { exit 1; } }
+    ' "$configFile")
+
+    if [ $? -eq 0 ]; then
+      echo "$value"
+      return 0
+    else
+      return 1
+    fi
+}
+
 pm_diag () {
   lspci -vv 2>/dev/null | awk '/Power Management.*?/{print $0}' RS= | grep --color -P '(^[a-z0-9:.]+|D0[+-]*|D1[+-]*|D2[+-]*|D3[a-z+-]*|ASPM.*?abled|ASPM_[^ ]*|ASPM L[^,]*)'
 }
@@ -963,6 +1114,19 @@ apply () {
   optimize_nic_interrupt_affinity "$NIC_IRQ_BANNED"
 
   optimize_tcp
+
+  if [ "$KERNEL_PREFERRED_CSTATES" = "default" ]; then
+    remove_kernel_parameter "intel_idle.preferred_cstates"
+  else
+    set_kernel_parameter "intel_idle.preferred_cstates" "$KERNEL_PREFERRED_CSTATES"
+  fi
+
+  if [ "$KERNEL_MITIGATIONS" = "default" ]; then
+    remove_kernel_parameter "mitigations"
+  else
+    set_kernel_parameter "mitigations" "$KERNEL_MITIGATIONS"
+  fi
+
 }
 
 unapply () {

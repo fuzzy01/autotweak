@@ -93,6 +93,33 @@ _(PCI PM Control)_:
 > Warning: Be aware that changing this setting can affect system stability and performance. It is recommended to monitor the system after applying any changes and revert back if any undesirable behavior is observed.
 :end
 
+_(Preferred C states on Alder Lake CPUs)_:
+: <select name="KERNEL_PREFERRED_CSTATES">
+    <?=mk_option($cfg['KERNEL_PREFERRED_CSTATES'], "default", "_(Kernel Default)_");?>
+    <?=mk_option($cfg['KERNEL_PREFERRED_CSTATES'], "2", "_(Prefer C1)_");?>
+    <?=mk_option($cfg['KERNEL_PREFERRED_CSTATES'], "4", "_(Prefer C1E)_");?>
+  </select>
+
+:autotweak_preferred_c_states_plug:
+> The C1 and C1E states on Adler Lake are mutually exclusive. Only one of them can be enabled at one time. By default the kernel disables C1 state.
+> This setting allows you to enable C1 state and disable C1E state. 
+> Please note that this adjustment directly alters the kernel boot parameters. A system reboot is necessary for the changes to take effect.
+:end
+
+_(Security Migitations)_:
+: <select name="KERNEL_MITIGATIONS">
+    <?=mk_option($cfg['KERNEL_MITIGATIONS'], "default", "_(Enabled: Kernel Default)_");?>
+    <?=mk_option($cfg['KERNEL_MITIGATIONS'], "off", "_(Disabled)_");?>
+  </select>
+
+:autotweak_security_mitigations_plug:
+Field Description:
+> This setting allows you to disable various CPU security mitigations that are in place to protect against known vulnerabilities such as Spectre and Meltdown.
+> While disabling these mitigations can improve system performance, it is important to understand that this may expose your CPU to potential security risks.
+> Use this option only if you are aware of the security implications and have measures in place to mitigate potential threats. 
+> Please note that this adjustment directly alters the kernel boot parameters. A system reboot is necessary for the changes to take effect.
+:end
+
 <input type="submit" value="Apply">
 <input type="button" value="Done" onclick="done()">
 </form>
