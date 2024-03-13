@@ -23,7 +23,7 @@ log() {
 
     # Log the message with the script's basename as the tag
     logger  -t "$(basename "$0")" "$message"
-    echo "$message"  > /dev/tty
+    # echo "$message"  > /dev/tty
 }
 
 #
@@ -783,7 +783,7 @@ optimize_nic_interrupt_affinity() {
     banned_cpu_array=("${banned_cpu_array[@]}" "${to_ban[@]}")
   done
 
-  echo "Banned CPUs for network interface interrupt_affinity: ${banned_cpu_array[*]}"
+  log "Banned CPUs for network interface interrupt_affinity: ${banned_cpu_array[*]}"
 
   for interface in /sys/class/net/*; do
     # Extract just the interface name, not the full path
