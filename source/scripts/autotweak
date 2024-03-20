@@ -707,8 +707,10 @@ set_generic_nic_interrupt_affinity() {
   local irq="${interrupts[0]}"
 
   echo ${cpu_array[$current_cpu_index]} > /proc/irq/"$irq"/smp_affinity_list
-  printf "%x" $((1 << ${cpu_array[$current_cpu_index]})) > /sys/class/net/"$interface"/queues/tx-$queue_num/xps_cpus
-  log "Set CPU affinity of interrupt $irq and rx/tx queue $queue_num of $interface to CPU ${cpu_array[$current_cpu_index]}"
+  log "Set CPU affinity of interrupt $irq of $interface to CPU ${cpu_array[$current_cpu_index]}"
+  # xps_cpus exist but writting fails
+  #printf "%x" $((1 << ${cpu_array[$current_cpu_index]})) > /sys/class/net/"$interface"/queues/tx-$queue_num/xps_cpus
+  #log "Set CPU affinity of interrupt $irq and tx queue $queue_num of $interface to CPU ${cpu_array[$current_cpu_index]}"
 
   # Prepare the next CPU, respecting the max CPU index
   current_cpu_index=$((current_cpu_index + 1))
