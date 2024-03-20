@@ -106,7 +106,7 @@ _(Preferred C states on Alder Lake CPUs)_:
 > Please note that this adjustment directly alters the kernel boot parameters. A system reboot is necessary for the changes to take effect.
 :end
 
-_(Security Migitations)_:
+_(Security Mitigations)_:
 : <select name="KERNEL_MITIGATIONS">
     <?=mk_option($cfg['KERNEL_MITIGATIONS'], "default", "_(Enabled: Kernel Default)_");?>
     <?=mk_option($cfg['KERNEL_MITIGATIONS'], "off", "_(Disabled)_");?>
