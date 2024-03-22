@@ -906,7 +906,7 @@ optimize_tcp() {
       sysctl -w net.ipv4.tcp_rmem="4096 87380 33554432" > /dev/null
       sysctl -w net.ipv4.tcp_wmem="4096 65536 33554432" > /dev/null 
       # Disable slow start
-      sysctl -w nnet.ipv4.tcp_slow_start_after_idle=0 > /dev/null   
+      sysctl -w net.ipv4.tcp_slow_start_after_idle=0 > /dev/null   
       ;;
      *)
       echo "No specific optimization for this speed: $max_speed Mb/s"
