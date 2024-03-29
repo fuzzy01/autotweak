@@ -21,20 +21,21 @@
 ##&name;
 ###&version;
 - Fix plugin URL for CA.
+- Fix release notes formatting for CA.
 
-1.3.0
-- Add kernel boot parameter change feature.
+###1.3.0
+- Add support for disabling CPU security mitigations.
 
-1.2.0
+###1.2.0
 - Add support for generic nic card irq handling.
 - Avoid certain devices when allocating cpus to network interfaces.
 
-1.1.0
+###1.1.0
 - Add support for AMD cpus and older cpus.
 - Unapply settings on uninstall.
 - New icon.
 
-1.0.0
+###1.0.0
 - First release.
 
 </CHANGES>
