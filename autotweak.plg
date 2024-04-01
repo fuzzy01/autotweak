@@ -4,7 +4,7 @@
 <!ENTITY author		"fuzzy01">
 <!ENTITY version	"dev">
 <!ENTITY launch		"Settings/AutoTweak">
-<!ENTITY pluginURL	"https://raw.githubusercontent.com/&author;/&name;_repo/main/&name;.plg">
+<!ENTITY pluginURL	"https://raw.githubusercontent.com/&author;/unraid_plg_repo/main/&name;.plg">
 <!ENTITY md5		"4d664b2c98daee944f449c1d86104980">
 ]>
 
