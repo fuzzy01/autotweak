@@ -269,7 +269,7 @@ set_aspm_feature() {
 
 set_pci_power_control() {
     if [ $# -lt 2 ]; then
-        echo "Usage: set_pci_power_control [control_stata] [banned_drivers]"
+        echo "Usage: set_pci_power_control [control_state] [banned_drivers]"
         echo "control_state: 'auto' or 'on'"
         echo "banned_drivers: Comma-separated list of drivers to exclude (e.g., 'driver1,driver2')"
         return 1
@@ -325,6 +325,54 @@ set_pci_power_control() {
           fi
         fi
     done
+}
+
+manage_r8125_aspm_conf() {
+  local action=$1
+  local filePath="/boot/config/modprobe.d/r8125.conf"
+
+  if [ $# -lt 1 ]; then
+      echo "Usage: manage_r8125_aspm_conf [aspm_state]"
+      echo "aspm_state: 'enable' or 'disable'"
+      return 1
+  fi
+
+  if [[ "$action" != "enable" && "$action" != "disable" ]]; then
+      echo "Invalid action. Specify 'enable' or 'disable'."
+      return 1
+  fi
+
+  local content="options r8125 aspm=$([[ "$action" == "enable" ]] && echo "1" || echo "0")"
+  # Check if the file exists and has the same content
+  if [[ ! -f "$filePath" ]] || [[ "$(cat "$filePath")" != "$content" ]]; then
+    echo "$content" > "$filePath"
+  fi
+
+  log "Set r8125 ASPM to $action"
+}
+
+manage_r8168_aspm_conf() {
+  local action=$1
+  local filePath="/boot/config/modprobe.d/r8168.conf"
+
+  if [ $# -lt 1 ]; then
+      echo "Usage: manage_r8168_aspm_conf [aspm_state]"
+      echo "aspm_state: 'enable' or 'disable'"
+      return 1
+  fi
+
+  if [[ "$action" != "enable" && "$action" != "disable" ]]; then
+      echo "Invalid action. Specify 'enable' or 'disable'."
+      return 1
+  fi
+
+  local content="options r8168 aspm=$([[ "$action" == "enable" ]] && echo "1" || echo "0")"
+  # Check if the file exists and has the same content
+  if [[ ! -f "$filePath" ]] || [[ "$(cat "$filePath")" != "$content" ]]; then
+    echo "$content" > "$filePath"
+  fi
+
+  log "Set r8169 ASPM to $action"
 }
 
 #
@@ -1112,6 +1160,14 @@ apply () {
 
   if [ "$PCI_PM_CONTROL" != "default" ]; then
     set_pci_power_control "$PCI_PM_CONTROL" "$PCI_PM_BANNED"
+  fi
+
+  if lsmod | grep -q "r8125"; then
+    manage_r8125_aspm_conf "$R8125_ASPM"
+  fi
+
+  if lsmod | grep -q "r8168"; then
+    manage_r8168_aspm_conf "$R8168_ASPM"
   fi
 
   optimize_nic_interrupt_affinity "$NIC_IRQ_BANNED"
