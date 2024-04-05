@@ -101,7 +101,7 @@ _(Preferred C states on Alder Lake CPUs)_:
   </select>
 
 :autotweak_preferred_c_states_plug:
-> The C1 and C1E states on Adler Lake are mutually exclusive. Only one of them can be enabled at one time. By default the kernel disables C1 state.
+> The C1 and C1E states on Alder Lake and later are mutually exclusive. Only one of them can be enabled at one time. By default the kernel disables C1 state.
 > This setting allows you to enable C1 state and disable C1E state. 
 > Please note that this adjustment directly alters the kernel boot parameters. A system reboot is necessary for the changes to take effect.
 :end
@@ -113,7 +113,6 @@ _(Security Mitigations)_:
   </select>
 
 :autotweak_security_mitigations_plug:
-Field Description:
 > This setting allows you to disable various CPU security mitigations that are in place to protect against known vulnerabilities such as Spectre and Meltdown.
 > While disabling these mitigations can improve system performance, it is important to understand that this may expose your CPU to potential security risks.
 > Use this option only if you are aware of the security implications and have measures in place to mitigate potential threats. 
