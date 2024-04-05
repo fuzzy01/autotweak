@@ -408,7 +408,7 @@ get_prefered_cpus() {
   declare -A core_perf_pairs
   local min_perf_value
   for cpu_dir in /sys/devices/system/cpu/cpu[0-9]*/; do
-    core_id=$(basename $cpu_dir)
+    core_id=$(basename "$cpu_dir")
     core_id=${core_id#cpu}
     highest_perf_file="$cpu_dir/acpi_cppc/highest_perf"
     if [ -f "$highest_perf_file" ]; then
@@ -432,6 +432,7 @@ get_prefered_cpus() {
   echo "${e_cores[@]}"
 }
 
+# Retrieves a list of usable CPUs based on the provided interface and a list of banned CPUs.
 get_usable_cpus() {
   local interface=$1
   local -a banned_cpu_array=("${@:2}")
@@ -731,7 +732,7 @@ get_nic_type() {
   fi
 
   # Get the PCI location of the network interface
-  local pci_location=$(cat /sys/class/net/"$interface"/device/uevent | grep -oP 'PCI_SLOT_NAME=\K.*')
+  local pci_location=$(grep -oP 'PCI_SLOT_NAME=\K.*' < /sys/class/net/"$interface"/device/uevent)
  
   if [ -z "$pci_location" ]; then
     log "Could not determine the PCI location of $interface"
@@ -759,7 +760,7 @@ get_nic_driver() {
   fi
 
   # Get the driver of the network interface
-  local nic_driver=$(cat /sys/class/net/"$interface"/device/uevent | grep -oP 'DRIVER=\K.*')
+  local nic_driver=$(grep -oP 'DRIVER=\K.*' < /sys/class/net/"$interface"/device/uevent)
  
   if [ -n "$nic_driver" ]; then
     echo "$nic_driver"
