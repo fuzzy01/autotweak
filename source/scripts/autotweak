@@ -23,7 +23,7 @@ log() {
 
     # Log the message with the script's basename as the tag
     logger  -t "$(basename "$0")" "$message"
-    # echo "$message"  > /dev/tty
+    echo "$message"  > /dev/tty
 }
 
 #
@@ -300,7 +300,9 @@ set_pci_power_control() {
         local control_file="${device_dir}/power/control"
         local driver_link="${device_dir}/driver"
 
-        if [ ! -f "$power_state_file" ] || [ ! -f "$control_file" ] || [ ! -L "$driver_link" ]; then
+        # if [ ! -f "$power_state_file" ] || [ ! -f "$control_file" ] || [ ! -L "$driver_link" ]; then
+        if [ ! -f "$power_state_file" ] || [ ! -f "$control_file" ]; then
+            log "Skipping device $device with missing files"
             continue
         fi
 
@@ -314,15 +316,14 @@ set_pci_power_control() {
         fi
 
         local power_state=$(cat "$power_state_file")
-        if [ "$power_state" != "unknown" ]; then
-          # Check if the file exists and is writable
-          if [ -w "$control_file" ]; then
-            echo "$control_state" > "$control_file"
-            log "PCIe PM control set to '$control_state' for device $device"
-          else
-            log "Cannot write to $control_file, might require root privileges"
-            return 1
-          fi
+        # if [ "$power_state" != "unknown" ]; then
+        # Check if the file exists and is writable
+        if [ -w "$control_file" ]; then
+          echo "$control_state" > "$control_file"
+          log "PCIe PM control set to '$control_state' for device $device"
+        else
+          log "Cannot write to $control_file, might require root privileges"
+          return 1
         fi
     done
 }
@@ -376,7 +377,7 @@ manage_r8168_aspm_conf() {
 }
 
 #
-# NIC irq affinity settings
+# CPU utilities
 #
 
 # Expand CPU list range into individual CPUs
@@ -396,6 +397,52 @@ expand_cpulist() {
   echo "${cpus[@]}"
 }
 
+# Generates a list of CPU ranges from individual CPUs
+generate_cpulist() {
+  local cpus=("$@")
+  local range=""
+  local prev_cpu=""
+  local -a cpu_ranges=()
+
+  for cpu in "${cpus[@]}"; do
+    if [[ -z "$prev_cpu" ]]; then
+      range="$cpu"
+    elif [[ $((prev_cpu + 1)) -ne $cpu ]]; then
+      if [[ "$range" != "$prev_cpu" ]]; then
+        range+="-${prev_cpu}"
+      fi
+      cpu_ranges+=("$range")
+      range="$cpu"
+    fi
+    prev_cpu=$cpu
+  done
+
+  # Append the final range
+  if [[ -n "$range" ]]; then
+    if [[ "$range" != "$prev_cpu" ]]; then
+      range+="-${prev_cpu}"
+    fi
+    cpu_ranges+=("$range")
+  fi
+
+  output=$(IFS=,; printf "%s" "${cpu_ranges[*]}")
+
+  echo "$output"
+}
+
+# Retrieves the highest CPU number
+get_highest_cpu_number() {
+    local highest_cpu_num=0
+    for cpu_dir in /sys/devices/system/cpu/cpu[0-9]*; do
+        local cpu_num="${cpu_dir##*cpu}"
+        if (( cpu_num > highest_cpu_num )); then
+            highest_cpu_num=$cpu_num
+        fi
+    done
+    echo $highest_cpu_num
+}
+
+# Retrieves the NUMA node number for a given network interface
 get_numa_node() {
     local interface=$1
     local numa_node_path="/sys/class/net/${interface}/device/numa_node"
@@ -406,7 +453,8 @@ get_numa_node() {
         return
     fi
 
-    local numa_node=$(cat "$numa_node_path")
+    local numa_node
+    read  numa_node < "$numa_node_path"
     if [ "$numa_node" -eq -1 ]; then
         # Single node
         echo 0
@@ -415,6 +463,7 @@ get_numa_node() {
     fi
 }
 
+# Retrieves the interrupt numbers associated with a specific device and return the list of CPUs handling those interrupts.
 get_device_interrupts_cpus() {
   local device_name=$1
 
@@ -445,42 +494,53 @@ get_device_interrupts_cpus() {
   echo "${cpu_array[@]}"
 }
 
-get_prefered_cpus() {
+# Groups the CPUs by their performance level
+get_cpu_groups_by_perf() {
   # Check for CPPC
   if [ ! -f "/sys/devices/system/cpu/cpu0/acpi_cppc/highest_perf" ]; then
     local present=$(cat "/sys/devices/system/cpu/present")
-    expand_cpulist $present
+    echo "$present"    
     return
   fi
 
-  declare -A core_perf_pairs
-  local min_perf_value
+  declare -A perf_cpu_map
+
   for cpu_dir in /sys/devices/system/cpu/cpu[0-9]*/; do
-    core_id=$(basename "$cpu_dir")
-    core_id=${core_id#cpu}
-    highest_perf_file="$cpu_dir/acpi_cppc/highest_perf"
-    if [ -f "$highest_perf_file" ]; then
-      perf_value=$(cat "$highest_perf_file")
-      core_perf_pairs[$core_id]=$perf_value
-
-      if [[ -z "$min_perf_value" || "$perf_value" -lt "$min_perf_value" ]]; then
-        min_perf_value=$perf_value
-      fi          
+    if [ -f "${cpu_dir}acpi_cppc/highest_perf" ]; then
+      local cpu_id=$(basename "$cpu_dir")
+      cpu_id=${cpu_id#cpu}
+      local perf_value
+      read perf_value < "$cpu_dir/acpi_cppc/highest_perf"
+      perf_cpu_map[$perf_value]+="${cpu_id} "
     fi
   done
 
-  local -a e_cores=()
+  local -a sorted_cpu_ranges
 
-  for core_id in "${!core_perf_pairs[@]}"; do
-    if [ "${core_perf_pairs[$core_id]}" -eq "$min_perf_value" ]; then
-        e_cores+=($core_id)
-    fi
+  for perf in $(echo "${!perf_cpu_map[@]}" | tr ' ' '\n' | sort -nr); do
+    local cpus_sorted=($(echo ${perf_cpu_map[$perf]} | tr ' ' '\n' | sort -n))
+    local cpu_ranges=$(generate_cpulist "${cpus_sorted[@]}")
+    sorted_cpu_ranges+=("$cpu_ranges")
   done
 
-  echo "${e_cores[@]}"
+  echo "${sorted_cpu_ranges[@]}"
 }
 
-# Retrieves a list of usable CPUs based on the provided interface and a list of banned CPUs.
+# Get the efficient CPUs
+get_efficient_cpus() {
+  local -a cpu_array=($(get_cpu_groups_by_perf))
+  local cpu_array_size=${#cpu_array[@]}
+  
+  if [ "$cpu_array_size" -gt 1 ]; then      
+    # Hybrid CPU, use efficient
+    echo "${cpu_array[1]}"
+  else
+    # Non hybrid CPU, use normal cores
+    echo "${cpu_array[0]}"
+  fi    
+}
+
+# Retrieves a list of usable CPUs based on the provided network interface and a list of banned CPUs.
 get_usable_cpus() {
   local interface=$1
   local -a banned_cpu_array=("${@:2}")
@@ -489,23 +549,13 @@ get_usable_cpus() {
   local local_cpulist=$(cat /sys/class/net/"$interface"/device/local_cpulist)
   local -a local_cpu_array=($(expand_cpulist "$local_cpulist"))
 
-  # Get prefered CPUs
-  local prefered_cpu_array=($(get_prefered_cpus))
+  # Get efficent CPUs
+  local e_cpu_array=($(expand_cpulist "$(get_efficient_cpus)"))
 
-  is_banned_cpu() {
-    local cpu=$1
-    [[ " ${banned_cpu_array[@]} " =~ " ${cpu} " ]]
-  }
-
-  is_prefered_cpu() {
-    local cpu=$1
-    [[ " ${prefered_cpu_array[@]} " =~ " ${cpu} " ]]
-  }
-
-  # Filter out banned and not prefered CPUs
+  # Filter out banned and not preferred CPUs
   local -a cpu_array=()
   for cpu in "${local_cpu_array[@]}"; do
-    if is_prefered_cpu "$cpu"  && ! is_banned_cpu "$cpu"; then
+    if [[ " ${e_cpu_array[@]} " =~ " ${cpu} " ]] && ! [[ " ${banned_cpu_array[@]} " =~ " ${cpu} " ]]; then
       cpu_array+=("$cpu")
     fi
   done
@@ -513,13 +563,18 @@ get_usable_cpus() {
   echo "${cpu_array[@]}"
 }
 
-set_rtl8125_interrupt_affinity() {
-  local interface=$1
-  local first_cpu=$2
-  local -a cpu_array=("${@:3}")
- 
+#
+# NIC irq affinity settings
+#
+
+# Validates the input parameters for affinity functions
+validate_affinity_function_params() {
+  local interface="$1"
+  local first_cpu="$2"
+  local cpu_array=("${@:3}")
+
   if [[ -z "$interface" || -z "$first_cpu" || -z "${cpu_array[*]}" ]]; then
-    echo "Usage: set_rtl8125_interrupt_affinity [interface] [first_cpu] [cpu_array]"
+    echo "Usage: set_interrupt_affinity [interface] [first_cpu] [cpu_array]"
     echo "interface: Network interface (e.g., eth0)"
     echo "first_cpu: First CPU to assign the first interrupt"
     echo "cpu_array: Array of CPUs to use"
@@ -527,7 +582,31 @@ set_rtl8125_interrupt_affinity() {
   fi
 
   if ! [[ $first_cpu =~ ^[0-9]+$ ]]; then
-    echo "Error: $first_cpu is not a number"
+    log_message "Error: first_cpu is not a valid number."
+    return 1
+  fi
+
+  return 0
+}
+
+# Set the CPU affinity for a specific interrupt and rx/tx queue
+set_nic_interrupt_affinity() {
+  local interface=$1
+  local irq=$2
+  local queue_num=$3
+  local cpu=$4
+
+  echo $cpu > /proc/irq/"$irq"/smp_affinity_list
+  printf "%x" $((1 << $cpu)) > /sys/class/net/"$interface"/queues/tx-$queue_num/xps_cpus
+  log "Set CPU affinity of interrupt $irq and tx queue $queue_num of $interface to CPU $cpu"
+}
+
+set_rtl8125_interrupt_affinity() {
+  local interface=$1
+  local first_cpu=$2
+  local -a cpu_array=("${@:3}")
+ 
+  if ! validate_affinity_function_params "$@"; then
     return 1
   fi
 
@@ -553,6 +632,20 @@ set_rtl8125_interrupt_affinity() {
     log "The number of interrupts $irq_count is less than the number of rx queues ($rx_queue_count) for interface $interface"
     return 1
   fi
+
+  # TX queue count
+  local tx_queue_count=$(ls -d /sys/class/net/"$interface"/queues/tx-* | wc -l)
+
+  # The interrupts associated with the tx queues are fixed
+  local tx_interrupts
+  if [ "$tx_queue_count" -eq 1 ]; then
+    tx_interrupts=("${interrupts[16]}")  
+  elif [ "$tx_queue_count" -eq 2 ]; then
+    tx_interrupts=("${interrupts[16]}" "${interrupts[18]}")  
+  else
+    log "Unknown RTL8125 tx queue configuration for interface $interface"
+    return 1
+  fi  
 
   # Find first CPU
   local first_cpu_index=0
@@ -583,25 +676,10 @@ set_rtl8125_interrupt_affinity() {
     fi
   done
 
-   # TX queue count
-  local tx_queue_count=$(ls -d /sys/class/net/"$interface"/queues/tx-* | wc -l)
-
-  # The interrupts associated with the tx queues are fixed
-  local tx_interrupts
-  if [ "$tx_queue_count" -eq 1 ]; then
-    tx_interrupts=("${interrupts[16]}")  
-  elif [ "$tx_queue_count" -eq 2 ]; then
-    tx_interrupts=("${interrupts[16]}" "${interrupts[18]}")  
-  else
-    log "Unknown RTL8125 tx queue configuration for interface $interface"
-    # Return no error as we already assigned rx queues to CPU cores
-    echo "${cpu_array[$current_cpu_index]}"
-    return 0
-  fi  
-
   # Set the CPU affinity for each interrupt and corresponding xps_cpus for tx queues, cycling through available CPU cores
   local queue_num=0
   local current_cpu_index=$first_cpu_index
+  # rx queue count can be same as tx queue count or twice the number of tx queues
   local step=$((rx_queue_count / tx_queue_count))
   for irq in "${tx_interrupts[@]}"; do
     if [ "$queue_num" -ge "$tx_queue_count" ]; then
@@ -637,16 +715,7 @@ set_intel_nic_interrupt_affinity() {
   local first_cpu=$2
   local -a cpu_array=("${@:3}")
 
-  if [[ -z "$interface" || -z "$first_cpu" || -z "${cpu_array[*]}" ]]; then
-    echo "Usage: set_intel_nic_interrupt_affinity [interface] [first_cpu] [cpu_array]"
-    echo "interface: Network interface (e.g., eth0)"
-    echo "first_cpu: First CPU to assign the first interrupt"
-    echo "cpu_array: Array of CPUs to use"
-    return 1
-  fi
-
-  if ! [[ $first_cpu =~ ^[0-9]+$ ]]; then
-    echo "Error: $first_cpu is not a number"
+  if ! validate_affinity_function_params "$@"; then
     return 1
   fi
 
@@ -683,10 +752,8 @@ set_intel_nic_interrupt_affinity() {
     if [ "$queue_num" -ge "$rx_queue_count" ]; then
       break
     fi
-
-    echo ${cpu_array[$current_cpu_index]} > /proc/irq/"$irq"/smp_affinity_list
-    printf "%x" $((1 << ${cpu_array[$current_cpu_index]})) > /sys/class/net/"$interface"/queues/tx-$queue_num/xps_cpus
-    log "Set CPU affinity of interrupt $irq and rx/tx queue $queue_num of $interface to CPU ${cpu_array[$current_cpu_index]}"
+    
+    set_nic_interrupt_affinity $interface $irq $queue_num ${cpu_array[$current_cpu_index]}
 
     queue_num=$((queue_num + 1))
 
@@ -706,16 +773,7 @@ set_generic_nic_interrupt_affinity() {
   local first_cpu=$2
   local -a cpu_array=("${@:3}")
 
-  if [[ -z "$interface" || -z "$first_cpu" || -z "${cpu_array[*]}" ]]; then
-    echo "Usage: set_generic_nic_interrupt_affinity [interface] [first_cpu] [banned_cpu_array]"
-    echo "interface: Network interface (e.g., eth0)"
-    echo "first_cpu: First CPU to assign the interrupt"
-    echo "cpu_array: Array of CPUs to use"
-    return 1
-  fi
-
-  if ! [[ $first_cpu =~ ^[0-9]+$ ]]; then
-    echo "Error: $first_cpu is not a number"
+  if ! validate_affinity_function_params "$@"; then
     return 1
   fi
 
@@ -755,11 +813,7 @@ set_generic_nic_interrupt_affinity() {
   local current_cpu_index=$first_cpu_index
   local irq="${interrupts[0]}"
 
-  echo ${cpu_array[$current_cpu_index]} > /proc/irq/"$irq"/smp_affinity_list
-  log "Set CPU affinity of interrupt $irq of $interface to CPU ${cpu_array[$current_cpu_index]}"
-  # xps_cpus exist but writting fails
-  #printf "%x" $((1 << ${cpu_array[$current_cpu_index]})) > /sys/class/net/"$interface"/queues/tx-$queue_num/xps_cpus
-  #log "Set CPU affinity of interrupt $irq and tx queue $queue_num of $interface to CPU ${cpu_array[$current_cpu_index]}"
+  set_nic_interrupt_affinity $interface $irq $queue_num ${cpu_array[$current_cpu_index]}
 
   # Prepare the next CPU, respecting the max CPU index
   current_cpu_index=$((current_cpu_index + 1))
@@ -771,6 +825,7 @@ set_generic_nic_interrupt_affinity() {
   return 0
 }
 
+# Get the vendor of the network interface
 get_nic_type() {
   local interface=$1
 
@@ -799,6 +854,7 @@ get_nic_type() {
   fi
 }
 
+# Get the driver of the network interface
 get_nic_driver() {
   local interface=$1
 
@@ -823,18 +879,24 @@ optimize_nic_interrupt_affinity() {
   local banned_device_list=$1
   
   # Convert the comma-separated list of banned drivers into an array
-  local OIFS=$IFS
   IFS=',' read -r -a banned_device_array <<< "$banned_device_list"
-  IFS=$OIFS
 
+  # CPU0 is always banned
   local -a banned_cpu_array=(0)
 
-  for banned_device in "${banned_device_array[@]}"; do
-    local to_ban=($(get_device_interrupts_cpus "$banned_device"))
-    banned_cpu_array=("${banned_cpu_array[@]}" "${to_ban[@]}")
-  done
+  # Get efficent CPUs
+  local -a e_cpu_array=($(expand_cpulist "$(get_efficient_cpus)"))
+  local e_cpu_array_size=${#e_cpu_array[@]}
+  local max_cpu=$(get_highest_cpu_number + 1)
 
-  log "Banned CPUs for network interface interrupt_affinity: ${banned_cpu_array[*]}"
+  # Only take into account banned devices if there are at least 4 efficent CPUs
+  if (( e_cpu_array_size >= 4 )); then  
+    for banned_device in "${banned_device_array[@]}"; do
+      local -a to_ban=($(get_device_interrupts_cpus "$banned_device"))
+      banned_cpu_array=("${banned_cpu_array[@]}" "${to_ban[@]}")
+    done
+    log "Banned CPUs for network interface interrupt affinity: $(generate_cpulist "${banned_cpu_array[@]}")"
+  fi
 
   for interface in /sys/class/net/*; do
     # Extract just the interface name, not the full path
@@ -846,14 +908,11 @@ optimize_nic_interrupt_affinity() {
     fi
 
     # Usable CPUs
+    local -a cpu_array_no_ban=($(get_usable_cpus "$interface_name" "0"))
     local -a cpu_array=($(get_usable_cpus "$interface_name" "${banned_cpu_array[@]}"))
+    local cpu_array_size=${#cpu_array[@]}
  
-    if [ ${#cpu_array[@]} -eq 0 ]; then
-      log "No available CPUs after filtering banned ones for interface $interface_name"
-      continue
-    fi
-
-    log "Usable CPUs for $interface_name: ${cpu_array[*]}"
+    log "Usable CPUs for $interface_name: $(generate_cpulist "${cpu_array[@]}")"
 
     local numa_node=$(get_numa_node "$interface_name")
     local first_cpu=${first_cpu_map[$numa_node]:-0}
@@ -863,10 +922,19 @@ optimize_nic_interrupt_affinity() {
 
     local ret
 
+    # Set the NIC interrupt affinity using some heuristics  
     if [[ "$nic_driver" == "r8125" ]]; then
-      ret=$(set_rtl8125_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array[@]}")
+      if (( (max_cpu <= 4 && cpu_array_size >= 2) || (max_cpu <= 6 && cpu_array_size >= 3) || cpu_array_size >= 4 )); then
+        ret=$(set_rtl8125_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array[@]}")
+      else
+        ret=$(set_rtl8125_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array_no_ban[@]}")
+      fi
     elif [[ "$nic_type" =~ Intel.* ]]; then
-      ret=$(set_intel_nic_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array[@]}")
+      if (( cpu_array_size >= 4 )); then
+        ret=$(set_intel_nic_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array[@]}")
+      else
+        ret=$(set_intel_nic_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array_no_ban[@]}")
+      fi
       if [ $? -ne 0 ]; then
         # Retry with generic
         ret=$(set_generic_nic_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array[@]}")
@@ -916,6 +984,7 @@ get_max_interface_speed() {
     echo "$max_speed"
 }
 
+# Optimize TCP setting based on the maximum interface speed
 optimize_tcp() {
   local max_speed=$(get_max_interface_speed)
     
@@ -968,10 +1037,22 @@ optimize_tcp() {
   log "TCP parameters optimized"
 }
 
+# Restore TCP parameters
+restore_tcp() {
+  sysctl -w net.core.rmem_max=33554432 > /dev/null
+  sysctl -w net.core.wmem_max=33554432 > /dev/null
+  sysctl -w net.ipv4.tcp_rmem="4096 87380 33554432" > /dev/null
+  sysctl -w net.ipv4.tcp_wmem="4096 65536 33554432" > /dev/null
+  sysctl -w net.ipv4.tcp_mtu_probing=0 > /dev/null
+ 
+  log "Restored TCP parameters"
+ }
+
 #
 # Kernel parameter functions
 #
 
+# Set a kernel command line parameter
 set_kernel_parameter() {
     local paramName=$1
     local paramValue=$2
@@ -1025,6 +1106,7 @@ set_kernel_parameter() {
     fi
 }
 
+# Remove a kernel command line parameter
 remove_kernel_parameter() {
     local paramName=$1
     local configFile="/boot/syslinux/syslinux.cfg"
@@ -1073,6 +1155,7 @@ remove_kernel_parameter() {
     fi
 }
 
+# Get a kernel command line parameter value
 get_kernel_parameter() {
     local paramName=$1
     local configFile="/boot/syslinux/syslinux.cfg"
@@ -1119,7 +1202,128 @@ get_kernel_parameter() {
     fi
 }
 
-pm_diag () {
+#
+# Housekeeping functions
+#
+optimize_houskeeping() {
+  local -a cpu_array=($(get_cpu_groups_by_perf))
+  local cpu_array_size=${#cpu_array[@]}
+
+  # Move interrupts to efficient cores on hybrid CPUs
+  if [ "$cpu_array_size" -gt 1 ]; then      
+    set_kernel_parameter "irqaffinity" "${cpu_array[1]}"
+  fi    
+
+  # Offload RCUs from IRQs
+  set_kernel_parameter "rcu_nocbs" "0-$(get_highest_cpu_number)"
+
+  # Enable nohz full on all cores
+  # set_kernel_parameter "nohz_full "0-$(get_highest_cpu_number)"
+
+  set_kernel_parameter "nmi_watchdog" "0"
+}
+
+restore_houskeeping() {
+  remove_kernel_parameter "irqaffinity"
+  remove_kernel_parameter "rcu_nocbs"
+  # remove_kernel_parameter "nohz_full"
+  remove_kernel_parameter "nmi_watchdog"
+}
+
+#
+# Diagnostics functions
+#
+
+#Function to check PCIe bridge Link Power Management state
+diag_pcie_bridge_lpm() {
+  local PCI_SYSFS="/sys/bus/pci/devices"
+  local PCI_BRIDGE_CLASS="0x060400"
+  local devices=$(ls ${PCI_SYSFS})
+  local -a bridge_devices=()
+
+  # Get list of pci bridge devices
+  for dev in $devices; do
+    if [ -d "${PCI_SYSFS}"/"${dev}" ] &&
+      [ -f "${PCI_SYSFS}"/"${dev}"/config ]; then
+      class=$(cat "${PCI_SYSFS}"/"${dev}"/class)
+      if [[ "${class}" == "${PCI_BRIDGE_CLASS}" ]]; then
+        bridge_devices+=("${dev}")
+      fi
+    fi
+  done
+
+  link_state() {
+    local pciests1=$1
+    local byte1="$((16#${pciests1} >> 8))"
+    local ltsmstate="$((16#${pciests1} & 255))"
+    local l1msg="Link is in L1"
+    local policy=""
+
+    # Some bit manipulation to get Link Status
+    lnkstat=$(((byte1 >> 3) & 15))
+
+    case "${lnkstat}" in
+    0)
+      case "${ltsmstate}" in
+      [0-9] | 1[0-6])
+        l1msg="Link is in Detect"
+        ;;
+      4[2-9])
+        l1msg="Link is in L2, LTSMSTATE=0"
+        ;;
+      59 | 60 | 61)
+        l1msg="Link is Disabled"
+        ;;
+      *)
+        l1msg="Link is not in Low Power State, LTSMSTATE=${ltsmstate}"
+        ;;
+      esac
+      echo "${l1msg}"
+      ;;
+    1)
+      echo "Link is Retraining"
+      ;;
+    3)
+      case "${ltsmstate}" in
+      5[5-9] | 60)
+        l1msg="Link is in L1"
+        ;;
+      61 | 62)
+        l1msg="Link is in L1.1"
+        ;;
+      63 | 64)
+        l1msg="Link is in L1.2"
+        ;;
+      *)
+        l1msg="Link is other L1 state, LTSMSTATE=${ltsmstate}"
+        ;;
+      esac
+      echo "${l1msg}"
+      ;;
+    4)
+      echo "Link is in L2"
+      ;;
+    5)
+      echo "Link is in L3"
+      ;;
+    [7-9] | 10)
+      echo "Link is in L0"
+      ;;
+    *)
+      echo "Unknown link state ${lnkstat}"
+      ;;
+    esac
+  }
+
+  # echo "Available PCI bridge devices:" "${bridge_devices[@]}"
+  for dev in "${bridge_devices[@]}"; do
+    #Get lower 16 bits of PCIESTS1 register
+    local pciests1=$(od -v -j 810 -N 2 -A none --endian=big -t x2 "${PCI_SYSFS}"/"${dev}"/config | sed 's/^[[:space:]]*//')
+    echo "$dev $(link_state "${pciests1}")"
+  done
+}
+
+diag_aspm_status () {
   lspci -vv 2>/dev/null | awk '/Power Management.*?/{print $0}' RS= | grep --color -P '(^[a-z0-9:.]+|D0[+-]*|D1[+-]*|D2[+-]*|D3[a-z+-]*|ASPM.*?abled|ASPM_[^ ]*|ASPM L[^,]*)'
 }
 
@@ -1170,9 +1374,21 @@ apply () {
     manage_r8168_aspm_conf "$R8168_ASPM"
   fi
 
-  optimize_nic_interrupt_affinity "$NIC_IRQ_BANNED"
+  if [ "$TWEAK_NIC_IRQ" = "enable" ]; then
+    optimize_nic_interrupt_affinity "$NIC_IRQ_BANNED"
+  fi
+ 
+  if [ "$TWEAK_TCP" = "enable" ]; then
+    optimize_tcp
+  else
+    restore_tcp
+  fi
 
-  optimize_tcp
+  if [ "$TWEAK_HK" = "enable" ]; then
+    optimize_houskeeping
+  else
+    restore_houskeeping
+  fi
 
   if [ "$KERNEL_PREFERRED_CSTATES" = "default" ]; then
     remove_kernel_parameter "intel_idle.preferred_cstates"
@@ -1188,6 +1404,7 @@ apply () {
 
 }
 
+# Unapply before uninstall
 unapply () {
   log "Unappply autotweak settings"
   
@@ -1196,11 +1413,16 @@ unapply () {
   set_dynamic_boost 0
   set_aspm_policy "default"
 
-  # Disable TCP MTU Probing
-  sysctl -w net.ipv4.tcp_mtu_probing=0 > /dev/null
+  restore_tcp
+  restore_houskeeping
+  remove_kernel_parameter "intel_idle.preferred_cstates"
+  remove_kernel_parameter "mitigations"
+
+  rm -f "/boot/config/modprobe.d/r8125.conf"
+  rm -f "/boot/config/modprobe.d/r8168.conf"
 }
 
-
+# Execute the function with all arguments  
 executeFunction() {
   local func_name=$1
   shift  # Remove the first argument (function name), leaving only the function's arguments
@@ -1222,10 +1444,13 @@ fi
 
 
 # Read default config
-source /usr/local/emhttp/plugins/autotweak/default.cfg
-
-# Read config
-CONFIG="/boot/config/plugins/autotweak/autotweak.cfg"
+if [ -f "/etc/autotweak/default.cfg" ]; then
+  source "/etc/autotweak/default.cfg"
+  CONFIG="/etc/autotweak/autotweak.cfg"
+else
+  source /usr/local/emhttp/plugins/autotweak/default.cfg
+  CONFIG="/boot/config/plugins/autotweak/autotweak.cfg"
+fi
 
 # Check if the file exists and is readable
 if [ -r "$CONFIG" ]; then

@@ -93,6 +93,44 @@ _(PCI PM Control)_:
 > Warning: Be aware that changing this setting can affect system stability and performance. It is recommended to monitor the system after applying any changes and revert back if any undesirable behavior is observed.
 :end
 
+_(Tweak NIC interrupt/queue affinities)_:
+: <select name="TWEAK_NIC_IRQ">
+    <?=mk_option($cfg['TWEAK_NIC_IRQ'], "enable", "_(Enable)_");?>
+    <?=mk_option($cfg['TWEAK_NIC_IRQ'], "disable", "_(Disable)_");?>
+  </select>
+
+:autotweak_tweak_nic_irq_plug:
+> This setting allows you to enable or disable the NIC intterupt/queue affinitie optimization feature. 
+> Modern NICs support hardware queues, which can improve network traffic processing by distributing it across multiple CPUs.
+> This feature is designed to optimize these by assigning different hardware queues (and their corresponding interrupts) to various CPUs. 
+> Additionally, for systems with hybrid CPUs, it aims to allocate these to E-cores. 
+> It also enables the Transmit Packet Steering (XPS) feature in the kernel to further enhance network performance.
+:end
+
+_(Tweak TCP settings)_:
+: <select name="TWEAK_TCP">
+    <?=mk_option($cfg['TWEAK_TCP'], "enable", "_(Enable)_");?>
+    <?=mk_option($cfg['TWEAK_TCP'], "disable", "_(Disable)_");?>
+  </select>
+
+:autotweak_tweak_tcp_plug:
+> This setting allows you to enable or disable the TCP optimization feature. 
+> If enabled it sets some TCP buffer size parameters based on the maximum physical interface speed detected in the system.
+:end
+
+_(Tweak Housekeeping)_:
+: <select name="TWEAK_HK">
+    <?=mk_option($cfg['TWEAK_HK'], "enable", "_(Enable)_");?>
+    <?=mk_option($cfg['TWEAK_HK'], "disable", "_(Disable)_");?>
+  </select>
+
+:autotweak_tweak_tcp_plug:
+> This setting allows you to enable or disable the Housekeeping optimization feature. 
+> If enabled offloads kernel housekeeping task (RCU callbacks) from interrupts into threads.
+> It also moves all interrupt processing on to E-cores on Hybrid CPUs. This step aims to ensure that housekeeping tasks do not interfere excessively with the performance cores.
+> A system reboot is necessary for the changes to take effect.
+:end
+
 _(Realtek RTL8125/RTL8126 ASPM Control)_:
 : <select name="R8125_ASPM">
     <?=mk_option($cfg['R8125_ASPM'], "enable", "_(Enable)_");?>
