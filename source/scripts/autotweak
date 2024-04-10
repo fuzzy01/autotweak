@@ -302,7 +302,7 @@ set_pci_power_control() {
 
         # if [ ! -f "$power_state_file" ] || [ ! -f "$control_file" ] || [ ! -L "$driver_link" ]; then
         if [ ! -f "$power_state_file" ] || [ ! -f "$control_file" ]; then
-            log "Skipping device $device with missing files"
+            log "Skipping device $device with missing power control"
             continue
         fi
 
@@ -315,7 +315,7 @@ set_pci_power_control() {
             continue
         fi
 
-        local power_state=$(cat "$power_state_file")
+        # local power_state=$(cat "$power_state_file")
         # if [ "$power_state" != "unknown" ]; then
         # Check if the file exists and is writable
         if [ -w "$control_file" ]; then
@@ -323,8 +323,23 @@ set_pci_power_control() {
           log "PCIe PM control set to '$control_state' for device $device"
         else
           log "Cannot write to $control_file, might require root privileges"
-          return 1
+          continue
         fi
+
+        for ata_device_dir in "${device_dir}"/ata*; do
+          if [[ ! -e $ata_device_dir ]]; then
+            break
+          fi
+          local ata_device=$(basename "$ata_device_dir")
+          local ata_control_file="${ata_device_dir}/power/control"
+          if [ -w "$ata_control_file" ]; then
+            echo "$control_state" > "$ata_control_file"
+            log "PCIe PM control set to '$control_state' for ata device $device/$ata_device"
+          else
+            log "Cannot write to $ata_control_file, might require root privileges"
+            continue
+          fi
+        done
     done
 }
 
