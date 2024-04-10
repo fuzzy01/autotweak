@@ -388,7 +388,7 @@ manage_r8168_aspm_conf() {
     echo "$content" > "$filePath"
   fi
 
-  log "Set r8169 ASPM to $action"
+  log "Set r8168 ASPM to $action"
 }
 
 #
