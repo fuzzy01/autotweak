@@ -268,80 +268,159 @@ set_aspm_feature() {
 }
 
 set_pci_power_control() {
-    if [ $# -lt 2 ]; then
-        echo "Usage: set_pci_power_control [control_state] [banned_drivers]"
-        echo "control_state: 'auto' or 'on'"
-        echo "banned_drivers: Comma-separated list of drivers to exclude (e.g., 'driver1,driver2')"
-        return 1
+  if [ $# -lt 2 ]; then
+    echo "Usage: set_pci_power_control [control_state] [banned_drivers]"
+    echo "control_state: 'auto' or 'on'"
+    echo "banned_drivers: Comma-separated list of drivers to exclude (e.g., 'driver1,driver2')"
+    return 1
+  fi
+
+  local control_state="$1"
+  local banned_drivers_str="$2"
+
+  # Check if the provided control state is valid
+  if [[ "$control_state" != "auto" && "$control_state" != "on" ]]; then
+    echo "Invalid control state: $control_state. Allowed values are 'auto' and 'on'"
+    return 1
+  fi
+
+  # Convert the comma-separated list of banned drivers into an array
+  local OIFS=$IFS
+  IFS=',' read -r -a banned_drivers <<< "$banned_drivers_str"
+  IFS=$OIFS
+
+  local device_driver
+  for device_dir in /sys/bus/pci/devices/*; do
+    if [ ! -d "$device_dir" ]; then
+      continue
     fi
 
-    local control_state="$1"
-    local banned_drivers_str="$2"
+    local device=$(basename "$device_dir")
+    local power_state_file="${device_dir}/power_state"
+    local control_file="${device_dir}/power/control"
+    local driver_link="${device_dir}/driver"
 
-    # Check if the provided control state is valid
-    if [[ "$control_state" != "auto" && "$control_state" != "on" ]]; then
-        echo "Invalid control state: $control_state. Allowed values are 'auto' and 'on'"
-        return 1
+    if [ ! -f "$power_state_file" ] || [ ! -f "$control_file" ]; then
+      log "Skipping device $device with missing power control"
+      continue
     fi
 
-    # Convert the comma-separated list of banned drivers into an array
-    local OIFS=$IFS
-    IFS=',' read -r -a banned_drivers <<< "$banned_drivers_str"
-    IFS=$OIFS
+    # Extract the driver name and check if it's in the banned list
+    local device_driver=$(readlink "$driver_link")
+    local device_driver=$(basename "$device_driver")
 
-    local device_driver
-    for device_dir in /sys/bus/pci/devices/*; do
-        if [ ! -d "$device_dir" ]; then
-            continue
-        fi
+    if [[ " ${banned_drivers[*]} " =~ " $device_driver " ]]; then
+      log "Skipping device $device with banned driver: $device_driver"
+      continue
+    fi
 
-        local device=$(basename "$device_dir")
-        local power_state_file="${device_dir}/power_state"
-        local control_file="${device_dir}/power/control"
-        local driver_link="${device_dir}/driver"
-
-        # if [ ! -f "$power_state_file" ] || [ ! -f "$control_file" ] || [ ! -L "$driver_link" ]; then
-        if [ ! -f "$power_state_file" ] || [ ! -f "$control_file" ]; then
-            log "Skipping device $device with missing power control"
-            continue
-        fi
-
-        # Extract the driver name and check if it's in the banned list
-        local device_driver=$(readlink "$driver_link")
-        local device_driver=$(basename "$device_driver")
-
-        if [[ " ${banned_drivers[*]} " =~ " $device_driver " ]]; then
-            log "Skipping device $device with banned driver: $device_driver"
-            continue
-        fi
-
-        # local power_state=$(cat "$power_state_file")
-        # if [ "$power_state" != "unknown" ]; then
-        # Check if the file exists and is writable
-        if [ -w "$control_file" ]; then
-          echo "$control_state" > "$control_file"
-          log "PCIe PM control set to '$control_state' for device $device"
-        else
-          log "Cannot write to $control_file, might require root privileges"
-          continue
-        fi
-
-        for ata_device_dir in "${device_dir}"/ata*; do
-          if [[ ! -e $ata_device_dir ]]; then
-            break
-          fi
-          local ata_device=$(basename "$ata_device_dir")
-          local ata_control_file="${ata_device_dir}/power/control"
-          if [ -w "$ata_control_file" ]; then
-            echo "$control_state" > "$ata_control_file"
-            log "PCIe PM control set to '$control_state' for ata device $device/$ata_device"
-          else
-            log "Cannot write to $ata_control_file, might require root privileges"
-            continue
-          fi
-        done
-    done
+    # Check if the file exists and is writable
+    if [ -w "$control_file" ]; then
+      echo "$control_state" > "$control_file"
+      log "PCIe PM control set to '$control_state' for device $device"
+    else
+      log "Cannot write to $control_file, might require root privileges"
+      continue
+    fi
+  done
 }
+
+set_sata_power_control() {
+  if [ $# -lt 1 ]; then
+    echo "Usage: set_sata_power_control [control_state]"
+    echo "control_state: 'auto' or 'on'"
+    return 1
+  fi
+
+  local control_state="$1"
+
+  # Check if the provided control state is valid
+  if [[ "$control_state" != "auto" && "$control_state" != "on" ]]; then
+    echo "Invalid control state: $control_state. Allowed values are 'auto' and 'on'"
+    return 1
+  fi
+
+  for ata_device_dir in /sys/bus/pci/devices/*/ata*; do
+    if [[ ! -e $ata_device_dir ]]; then
+      break
+    fi
+    
+    local ata_device=$(basename "$ata_device_dir")
+    local ata_control_file="${ata_device_dir}/power/control"
+
+    if [ -w "$ata_control_file" ]; then
+      echo "$control_state" > "$ata_control_file"
+      log "PM control set to '$control_state' for ata device $ata_device"
+    else
+      log "Cannot write to $ata_control_file, might require root privileges"
+      continue
+    fi
+  done
+}
+
+# Set the link power management policy for all SATA hosts
+set_sata_link_power_management() {
+  local policy=$1
+
+  # Validate input
+  if [[ -z "$policy" ]]; then
+    echo "Usage: set_scsi_link_power_management [policy]"
+    return 1
+  fi
+
+  # Iterate over each SCSI host and set the power management policy
+  for dir in /sys/class/scsi_host/host*/; do
+    local host_id=$(basename "$dir")
+    local policy_file="${dir}link_power_management_policy"
+
+    if [[ ! -f "$policy_file" ]]; then
+      continue
+    fi
+
+    if [[ -w "$policy_file" ]]; then
+      echo "$policy" > "$policy_file"
+      log "Set SATA link power management to $policy for ${host_id}"
+    else
+      echo "Cannot write to $policy_file - might require root privileges"
+    fi
+  done
+}
+
+pc10_ltr_hack() {
+    local ltr_show_path="/sys/kernel/debug/pmc_core/ltr_show"
+    local ltr_ignore_path="/sys/kernel/debug/pmc_core/ltr_ignore"
+
+    # Ensure the ltr_show file exists
+    if [ ! -f "$ltr_show_path" ]; then
+      mount -t debugfs none /sys/kernel/debug
+      if [ ! -f "$ltr_show_path" ]; then
+        log "PC10 hack: Failed to mount debugfs"
+        return 1
+      fi
+    fi
+
+    # Check if SOUTHPORT_C snoop value is greater than 0
+    local success=0
+    while read -r line; do
+      if [[ "$line" == *"SOUTHPORT_"* ]]; then
+        local device=$(echo "$line" | awk '{print $2}')
+        local snoop_value=$(echo "$line" | awk '/Snoop\(ns\):/ {print $NF}')
+        log "PC10 hack: $device is $snoop_value"
+        if [[ "$device" == *"SOUTHPORT_C" && "$snoop_value" != 0 ]]; then
+          local index=$(echo "$line" | awk '{print $1}')
+          log "PC10 hack: Ignoring $device with index $index"
+          echo "$index" > "$ltr_ignore_path"
+          success=1
+        fi
+      fi
+    done < "$ltr_show_path"
+    if [ "$success" -eq 1 ]; then
+      log "PC10 hack successfully applied"
+    else  
+      log "PC10 hack failed"
+    fi
+}
+
 
 manage_r8125_aspm_conf() {
   local action=$1
@@ -1234,15 +1313,12 @@ optimize_houskeeping() {
 
   # Enable nohz full on all cores
   # set_kernel_parameter "nohz_full "0-$(get_highest_cpu_number)"
-
-  set_kernel_parameter "nmi_watchdog" "0"
 }
 
 restore_houskeeping() {
   remove_kernel_parameter "irqaffinity"
   remove_kernel_parameter "rcu_nocbs"
   # remove_kernel_parameter "nohz_full"
-  remove_kernel_parameter "nmi_watchdog"
 }
 
 #
@@ -1381,6 +1457,12 @@ apply () {
     set_pci_power_control "$PCI_PM_CONTROL" "$PCI_PM_BANNED"
   fi
 
+  if [ "$SATA_PM_CONTROL" != "default" ]; then
+    set_sata_power_control "$SATA_PM_CONTROL"
+  fi
+
+  set_sata_link_power_management "$SATA_LINK_PM"
+
   if lsmod | grep -q "r8125"; then
     manage_r8125_aspm_conf "$R8125_ASPM"
   fi
@@ -1405,6 +1487,12 @@ apply () {
     restore_houskeeping
   fi
 
+  if [ "$KERNEL_NMI_WATCHDOG" = "default" ]; then
+    remove_kernel_parameter "nmi_watchdog"
+  else
+    set_kernel_parameter "nmi_watchdog" "0"
+  fi
+
   if [ "$KERNEL_PREFERRED_CSTATES" = "default" ]; then
     remove_kernel_parameter "intel_idle.preferred_cstates"
   else
@@ -1415,6 +1503,10 @@ apply () {
     remove_kernel_parameter "mitigations"
   else
     set_kernel_parameter "mitigations" "$KERNEL_MITIGATIONS"
+  fi
+
+  if [ "$PC10_LTR_HACK" = "on" ]; then
+    pc10_ltr_hack
   fi
 
 }

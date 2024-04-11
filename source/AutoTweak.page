@@ -94,6 +94,39 @@ _(PCI PM Control)_:
 > Warning: Be aware that changing this setting can affect system stability and performance. It is recommended to monitor the system after applying any changes and revert back if any undesirable behavior is observed.
 :end
 
+_(PM Control on SATA ports)_:
+: <select name="SATA_PM_CONTROL">
+    <?=mk_option($cfg['SATA_PM_CONTROL'], "default", "_(OS Default)_");?>
+    <?=mk_option($cfg['SATA_PM_CONTROL'], "auto", "_(Enable)_");?>
+    <?=mk_option($cfg['SATA_PM_CONTROL'], "on", "_(Disable)_");?>
+  </select>
+
+:autotweak_sata_pm_control_plug:
+> This setting allows you to set the power control state for SATA ports on your system. 
+> If enabled the system automatically adjusts the power state of the SATA ports based on the current usage and activity, optimizing for energy efficiency without significantly compromising performance.
+> If disabled the SATA ports are kept in their maximum power state to ensure maximum performance, regardless of usage or activity.
+> Please note that changes will take effect immediately and will apply to all SATA port detected by the system.
+> Warning: Be aware that changing this setting can affect system stability and performance. It is recommended to monitor the system after applying any changes and revert back if any undesirable behavior is observed.
+:end
+
+_(SATA Link Power Management)_:
+: <select name="SATA_LINK_PM">
+    <?=mk_option($cfg['SATA_LINK_PM'], "max_performance", "_(Performancce)_");?>
+    <?=mk_option($cfg['SATA_LINK_PM'], "med_power_with_dipm", "_(Balanced)_");?>
+    <?=mk_option($cfg['SATA_LINK_PM'], "min_power", "_(Powersave)_");?>
+  </select>
+
+:autotweak_sata_link_pm_plug:
+> This setting allows you to set the SATA link power management policy on your system. 
+> By adjusting this policy, you can optimize the balance between power conservation and disk performance. 
+> The setting directly influences how aggressively your system saves power on SATA interfaces when they are not actively in use.
+> Available Options:
+> Performance: This policy keeps the SATA link in an active state, prioritizing performance over power saving. It is suitable for environments where disk performance is critical and power usage is a secondary concern.
+> Balanced: An intermediate option that provides a balance between power saving and performance. The link is allowed to enter a partial power-saving state when idle.
+> Powersave: Maximizes power savings by allowing the SATA link to enter a minimal power consumption state when not in active use. This option is ideal for systems where energy efficiency is paramount.
+> Warning: Be aware that changing this setting can affect system stability and performance. It is recommended to monitor the system after applying any changes and revert back if any undesirable behavior is observed.
+:end
+
 _(Tweak NIC interrupt/queue affinities)_:
 : <select name="TWEAK_NIC_IRQ">
     <?=mk_option($cfg['TWEAK_NIC_IRQ'], "enable", "_(Enable)_");?>
@@ -134,6 +167,19 @@ _(Tweak Housekeeping)_:
 
 <div class="title"><span class="left"><i class="fa fa-cog title"></i>Advanced settings</span></div>
 
+_(NMI Watchdog)_:
+: <select name="KERNEL_NMI_WATCHDOG">
+    <?=mk_option($cfg['KERNEL_NMI_WATCHDOG'], "default", "_(Enable: Kernel Default)_");?>
+    <?=mk_option($cfg['KERNEL_NMI_WATCHDOG'], "off", "_(Disable)_");?>
+  </select>
+
+:autotweak_nmi_watchdogs_plug:
+> This setting allows you to disable the Non-Maskable Interrupt (NMI) watchdog on your system. 
+> The NMI watchdog is a hardware feature that helps in detecting system lockups by generating a non-maskable interrupt when the system does not respond within a specified period. 
+> However, in stable environments where such lockups are unlikely, disabling the NMI watchdog can reduce power consumption by decreasing unnecessary CPU wake-ups.
+> A system reboot is necessary for the changes to take effect.
+:end
+
 _(Realtek RTL8125/RTL8126 ASPM Control)_:
 : <select name="R8125_ASPM">
     <?=mk_option($cfg['R8125_ASPM'], "enable", "_(Enable)_");?>
@@ -160,21 +206,21 @@ _(Realtek RTL8168/RTL8111 ASPM Control)_:
 
 _(Preferred C states on Alder Lake CPUs)_:
 : <select name="KERNEL_PREFERRED_CSTATES">
-    <?=mk_option($cfg['KERNEL_PREFERRED_CSTATES'], "default", "_(Kernel Default)_");?>
+    <?=mk_option($cfg['KERNEL_PREFERRED_CSTATES'], "default", "_(OS Default)_");?>
     <?=mk_option($cfg['KERNEL_PREFERRED_CSTATES'], "2", "_(Prefer C1)_");?>
     <?=mk_option($cfg['KERNEL_PREFERRED_CSTATES'], "4", "_(Prefer C1E)_");?>
   </select>
 
 :autotweak_preferred_c_states_plug:
-> The C1 and C1E states on Alder Lake and later are mutually exclusive. Only one of them can be enabled at one time. By default the kernel disables C1 state.
+> The C1 and C1E states on Alder Lake CPUs are mutually exclusive. Only one of them can be enabled at one time. By default the kernel disables C1 state.
 > This setting allows you to enable C1 state and disable C1E state. 
 > Please note that this adjustment directly alters the kernel boot parameters. A system reboot is necessary for the changes to take effect.
 :end
 
 _(Security Mitigations)_:
 : <select name="KERNEL_MITIGATIONS">
-    <?=mk_option($cfg['KERNEL_MITIGATIONS'], "default", "_(Enabled: Kernel Default)_");?>
-    <?=mk_option($cfg['KERNEL_MITIGATIONS'], "off", "_(Disabled)_");?>
+    <?=mk_option($cfg['KERNEL_MITIGATIONS'], "default", "_(Enable: Kernel Default)_");?>
+    <?=mk_option($cfg['KERNEL_MITIGATIONS'], "off", "_(Disable)_");?>
   </select>
 
 :autotweak_security_mitigations_plug:
@@ -182,6 +228,21 @@ _(Security Mitigations)_:
 > While disabling these mitigations can improve system performance, it is important to understand that this may expose your CPU to potential security risks.
 > Use this option only if you are aware of the security implications and have measures in place to mitigate potential threats. 
 > Please note that this adjustment directly alters the kernel boot parameters. A system reboot is necessary for the changes to take effect.
+:end
+
+_(PC10 Magic Hack)_:
+: <select name="PC10_LTR_HACK">
+    <?=mk_option($cfg['PC10_LTR_HACK'], "default", "_(Off)_");?>
+    <?=mk_option($cfg['PC10_LTR_HACK'], "on", "_(On)_");?>
+  </select>
+
+:autotweak_pc10_ltr_hack_plug:
+> Activating this setting may or may not offer a potential solution to achieve PC10, its effectiveness is not guaranteed.
+> This setting should be your last resort after exhausting all other standard power-saving measures.
+> This setting is designed for users who have thoroughly explored and applied all standard power management settings, ensured Active State Power Management (ASPM) is functioning correctly,
+> and experimented with various BIOS configurations yet still find their system unable to achieve PC10 power state. 
+> Check the system log to verify the successful application of this setting.
+> Warning: Be aware that changing this setting can affect system stability and performance.
 :end
 
 <input type="submit" value="Apply">
