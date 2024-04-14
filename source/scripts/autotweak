@@ -401,18 +401,30 @@ pc10_ltr_hack() {
 
     # Check if SOUTHPORT_C snoop value is greater than 0
     local success=0
+    local idx=0
     while read -r line; do
       if [[ "$line" == *"SOUTHPORT_"* ]]; then
-        local device=$(echo "$line" | awk '{print $2}')
-        local snoop_value=$(echo "$line" | awk '/Snoop\(ns\):/ {print $NF}')
+        local device
+        local snoop_value
+        local index=$(echo "$line" | awk '{print $1}')
+        if [[ $index =~ ^-?[0-9]+$ ]]; then
+          # New format
+          device=$(echo "$line" | awk '{print $2}')
+          snoop_value=$(echo "$line" | awk '/Snoop\(ns\):/ {print $NF}')
+        else
+          # Old format
+          device=$(echo "$line" | awk '{print $1}')
+          snoop_value=$(echo "$line" | awk '/Snoop\(ns\):/ {print $NF}')
+        fi
         log "PC10 hack: $device is $snoop_value"
         if [[ "$device" == *"SOUTHPORT_C" && "$snoop_value" != 0 ]]; then
           local index=$(echo "$line" | awk '{print $1}')
-          log "PC10 hack: Ignoring $device with index $index"
-          echo "$index" > "$ltr_ignore_path"
+          log "PC10 hack: Ignoring $device with index $idx"
+          echo "$idx" > "$ltr_ignore_path"
           success=1
         fi
       fi
+      idx=$((idx+1))
     done < "$ltr_show_path"
     if [ "$success" -eq 1 ]; then
       log "PC10 hack successfully applied"
@@ -428,19 +440,23 @@ manage_r8125_aspm_conf() {
 
   if [ $# -lt 1 ]; then
       echo "Usage: manage_r8125_aspm_conf [aspm_state]"
-      echo "aspm_state: 'enable' or 'disable'"
+      echo "aspm_state: 'default', 'enable' or 'disable'"
       return 1
   fi
 
-  if [[ "$action" != "enable" && "$action" != "disable" ]]; then
+  if [[ "$action" != "default" && "$action" != "enable" && "$action" != "disable" ]]; then
       echo "Invalid action. Specify 'enable' or 'disable'."
       return 1
   fi
 
-  local content="options r8125 aspm=$([[ "$action" == "enable" ]] && echo "1" || echo "0")"
-  # Check if the file exists and has the same content
-  if [[ ! -f "$filePath" ]] || [[ "$(cat "$filePath")" != "$content" ]]; then
-    echo "$content" > "$filePath"
+  if [[ "$action" == "default" ]]; then
+    rm -f "$filePath"
+  else
+    local content="options r8125 aspm=$([[ "$action" == "enable" ]] && echo "1" || echo "0")"
+    # Check if the file exists and has the same content
+    if [[ ! -f "$filePath" ]] || [[ "$(cat "$filePath")" != "$content" ]]; then
+      echo "$content" > "$filePath"
+    fi
   fi
 
   log "Set r8125 ASPM to $action"
@@ -452,19 +468,23 @@ manage_r8168_aspm_conf() {
 
   if [ $# -lt 1 ]; then
       echo "Usage: manage_r8168_aspm_conf [aspm_state]"
-      echo "aspm_state: 'enable' or 'disable'"
+      echo "aspm_state: 'default', 'enable' or 'disable'"
       return 1
   fi
 
-  if [[ "$action" != "enable" && "$action" != "disable" ]]; then
+  if [[ "$action" != "default" && "$action" != "enable" && "$action" != "disable" ]]; then
       echo "Invalid action. Specify 'enable' or 'disable'."
       return 1
   fi
 
-  local content="options r8168 aspm=$([[ "$action" == "enable" ]] && echo "1" || echo "0")"
-  # Check if the file exists and has the same content
-  if [[ ! -f "$filePath" ]] || [[ "$(cat "$filePath")" != "$content" ]]; then
-    echo "$content" > "$filePath"
+  if [[ "$action" == "default" ]]; then
+    rm -f "$filePath"
+  else
+    local content="options r8168 aspm=$([[ "$action" == "enable" ]] && echo "1" || echo "0")"
+    # Check if the file exists and has the same content
+    if [[ ! -f "$filePath" ]] || [[ "$(cat "$filePath")" != "$content" ]]; then
+      echo "$content" > "$filePath"
+    fi
   fi
 
   log "Set r8168 ASPM to $action"
@@ -1525,8 +1545,8 @@ unapply () {
   remove_kernel_parameter "intel_idle.preferred_cstates"
   remove_kernel_parameter "mitigations"
 
-  rm -f "/boot/config/modprobe.d/r8125.conf"
-  rm -f "/boot/config/modprobe.d/r8168.conf"
+  manage_r8125_aspm_conf "default"
+  manage_r8168_aspm_conf "default"
 }
 
 # Execute the function with all arguments  
