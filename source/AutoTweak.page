@@ -182,6 +182,7 @@ _(NMI Watchdog)_:
 
 _(Realtek RTL8125/RTL8126 ASPM Control)_:
 : <select name="R8125_ASPM">
+    <?=mk_option($cfg['R8125_ASPM'], "default", "_(Driver Default)_");?>
     <?=mk_option($cfg['R8125_ASPM'], "enable", "_(Enable)_");?>
     <?=mk_option($cfg['R8125_ASPM'], "disable", "_(Disable)_");?>
   </select>
@@ -194,6 +195,7 @@ _(Realtek RTL8125/RTL8126 ASPM Control)_:
 
 _(Realtek RTL8168/RTL8111 ASPM Control)_:
 : <select name="R8168_ASPM">
+    <?=mk_option($cfg['R8168_ASPM'], "default", "_(Driver Default)_");?>
     <?=mk_option($cfg['R8168_ASPM'], "enable", "_(Enable)_");?>
     <?=mk_option($cfg['R8168_ASPM'], "disable", "_(Disable)_");?>
   </select>
@@ -230,7 +232,7 @@ _(Security Mitigations)_:
 > Please note that this adjustment directly alters the kernel boot parameters. A system reboot is necessary for the changes to take effect.
 :end
 
-_(PC10 Magic Hack)_:
+_(PC10 Hack)_:
 : <select name="PC10_LTR_HACK">
     <?=mk_option($cfg['PC10_LTR_HACK'], "default", "_(Off)_");?>
     <?=mk_option($cfg['PC10_LTR_HACK'], "on", "_(On)_");?>
