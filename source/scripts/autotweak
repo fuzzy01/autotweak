@@ -222,8 +222,7 @@ set_aspm_policy() {
 
   # Check if the policy provided is valid
   if [[ ! "$policy" =~ ^(default|performance|powersave|powersupersave)$ ]]; then
-    echo "Error: invalid policy: $policy"
-    echo "Available policies: default, performance, powersave, powersupersave"
+    echo "Error: invalid policy: $policy. Available policies: default, performance, powersave, powersupersave"
     return 1
   fi
 
@@ -325,6 +324,129 @@ set_pci_power_control() {
   done
 }
 
+set_all_nvme_apst_policy() {
+  if [ $# -lt 1 ]; then
+    echo "Usage: set_all_nvme_power_management [nmme_device] [policy]"
+    echo "policy: 'performance', 'balanced', 'powersave' or 'powersupersave'"
+    return 1
+  fi
+
+  local policy="$1"
+
+  for nvme_device in /dev/nvme?; do
+    local device=$(basename "$nvme_device")
+    set_nvme_apst_policy "$device" "$policy"
+  done
+}
+
+set_nvme_apst_policy() {
+  if [ $# -lt 2 ]; then
+    echo "Usage: set_nvme_power_management [nmme_device] [policy]"
+    echo "nvme_device: nvme device (e.g., nvme0)"
+    echo "policy: 'performance', 'balanced', 'powersave' or 'powersupersave'"
+    return 1
+  fi
+
+  local nvme_device="$1"
+  local policy="$2"
+
+  # Check if the provided policy is valid
+  if [[ ! "$policy" =~ ^(performance|balanced|powersave|powersupersave)$ ]]; then
+    echo "Error: invalid policy: $policy. Available policies: performance, balanced, powersave, powersupersave"
+    return 1
+  fi
+
+  local input_file=$(mktemp)
+  local output_file=$(mktemp)
+
+  nvme get-feature -f 0x0c --raw-binary  /dev/"$nvme_device" > "$input_file"
+  if [ $? -ne 0 ]; then
+    log "nvme get-feature failed on $nvme_device"
+    # Clean up temporary files
+    rm -f "$input_file"
+    rm -f "$output_file"
+    return 1
+  fi
+
+  filesize=$(stat -c %s "$input_file")
+  if [ $filesize -ne 256 ]; then
+    log "APST table has unexpected size: $filesize on $nvme_device"
+    # Clean up temporary files
+    rm -f "$input_file"
+    rm -f "$output_file"
+    return 1
+  fi
+
+  # Read and process the APST table, set new timeouts based on the policy
+  for (( i = 0; i < 32; i++ )); do
+    # Read a 64-bit (8 bytes) integer from the table
+    local value=$(od -j $((i * 8)) -N 8 -An -t u8 -v "$input_file")
+    value=$(echo $value)
+    local timeout_ms=$((value >> 8)) 
+    local state=$(((value & 0xff) >> 3))
+
+    # echo "$i State: $state Timeout: $timeout_ms"
+
+    # Only modify used rows. And only modify the timeout value.
+    if (( state != 0 )); then
+      if (( i==0 || i==1 || i==2)); then
+        # For operative states
+        case "$policy" in
+          performance)
+            timeout_ms=20000
+            ;;
+          balanced)
+            timeout_ms=200
+            ;;
+          powersave)
+            timeout_ms=100
+            ;;
+          powersupersave)
+            timeout_ms=50
+            ;;
+        esac
+      else
+        # For non-operative states
+        case "$policy" in
+          performance)
+            timeout_ms=20000
+            ;;
+          balanced)
+            timeout_ms=2000
+            ;;
+          powersave)
+            timeout_ms=1000
+            ;;
+          powersupersave)
+            timeout_ms=500
+            ;;
+        esac
+      fi
+      log "Set $nvme_device APST table entry $i Next state: $state Timeout: $timeout_ms"
+    fi
+
+    value=$((state << 3 | timeout_ms << 8))
+
+    # script hell...
+    printf "%016x" $value | sed 's/\(.\)\(.\)/\2\1/g' | rev | sed 's/../\\\\x&/g' |  xargs echo -en >> "$output_file"
+
+  done
+
+  nvme set-feature -f 0x0c --data="$output_file" -data-len=256 --value=1 /dev/nvme0 > /dev/null
+  ret=$?
+
+  # Clean up temporary files
+  rm -f "$input_file"
+  rm -f "$output_file"
+
+  if [ $ret -ne 0 ]; then
+    log "nvme set-feature failed on $nvme_device"
+    return 1
+  fi
+
+  log "Set $nvme_device APST policy to $policy"
+}
+
 set_sata_power_control() {
   if [ $# -lt 1 ]; then
     echo "Usage: set_sata_power_control [control_state]"
@@ -394,7 +516,7 @@ pc10_ltr_hack() {
     if [ ! -f "$ltr_show_path" ]; then
       mount -t debugfs none /sys/kernel/debug
       if [ ! -f "$ltr_show_path" ]; then
-        log "PC10 hack: Failed to mount debugfs"
+        log "PC10 hack: failed find supported PMC"
         return 1
       fi
     fi
@@ -445,7 +567,7 @@ manage_r8125_aspm_conf() {
   fi
 
   if [[ "$action" != "default" && "$action" != "enable" && "$action" != "disable" ]]; then
-      echo "Invalid action. Specify 'enable' or 'disable'."
+      echo "Invalid aspm_state $action. Allowed values are 'default', 'enable' or 'disable'."
       return 1
   fi
 
@@ -473,7 +595,7 @@ manage_r8168_aspm_conf() {
   fi
 
   if [[ "$action" != "default" && "$action" != "enable" && "$action" != "disable" ]]; then
-      echo "Invalid action. Specify 'enable' or 'disable'."
+      echo "Invalid aspm_state $action. Allowed values are 'default', 'enable' or 'disable'."
       return 1
   fi
 
@@ -1482,6 +1604,10 @@ apply () {
   fi
 
   set_sata_link_power_management "$SATA_LINK_PM"
+
+  if [ "$NVME_APST_POLICY" != "default" ]; then
+    set_all_nvme_apst_policy "$NVME_APST_POLICY"
+  fi
 
   if lsmod | grep -q "r8125"; then
     manage_r8125_aspm_conf "$R8125_ASPM"

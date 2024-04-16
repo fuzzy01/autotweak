@@ -63,7 +63,7 @@ _(Power Profile)_:
 :end
 
 
-_(ASPM Policy)_:
+_(PCI ASPM Policy)_:
 : <select name="ASPM_POLICY">
     <?=mk_option($cfg['ASPM_POLICY'], "default", "_(BIOS Default)_");?>
     <?=mk_option($cfg['ASPM_POLICY'], "performance", "_(Performance: ASPM Disabled)_");?>
@@ -76,10 +76,11 @@ _(ASPM Policy)_:
 > ASPM is a power management feature that adjusts the power usage of PCIe devices based on system activity and can significantly reduce power consumption when enabled.
 > Select a policy from the options below to define how the ASPM should behave. 
 > Please note that modifying this setting may impact the performance and power consumption of your PCIe devices. Make sure to understand the implications of each policy before applying the changes.
+> A system reboot is necessary for switching back to the default policy.
 > Warning: Be aware that changing the ASPM policy can affect system stability and performance. It is recommended to monitor the system after applying any changes and revert back if any undesirable behavior is observed.
 :end
 
-_(PCI PM Control)_:
+_(PCI Power Management Control)_:
 : <select name="PCI_PM_CONTROL">
     <?=mk_option($cfg['PCI_PM_CONTROL'], "default", "_(OS Default)_");?>
     <?=mk_option($cfg['PCI_PM_CONTROL'], "auto", "_(Enable)_");?>
@@ -91,10 +92,11 @@ _(PCI PM Control)_:
 > If enabled the system automatically adjusts the power state of the PCI devices based on the current usage and activity, optimizing for energy efficiency without significantly compromising performance.
 > If disabled the PCI devices are kept in their maximum power state to ensure maximum performance, regardless of usage or activity.
 > Please note that changes will take effect immediately and will apply to all compatible PCI devices detected by the system.
+> A system reboot is necessary for switching back to the default setting.
 > Warning: Be aware that changing this setting can affect system stability and performance. It is recommended to monitor the system after applying any changes and revert back if any undesirable behavior is observed.
 :end
 
-_(PM Control on SATA ports)_:
+_(Power Management Control on SATA ports)_:
 : <select name="SATA_PM_CONTROL">
     <?=mk_option($cfg['SATA_PM_CONTROL'], "default", "_(OS Default)_");?>
     <?=mk_option($cfg['SATA_PM_CONTROL'], "auto", "_(Enable)_");?>
@@ -102,16 +104,17 @@ _(PM Control on SATA ports)_:
   </select>
 
 :autotweak_sata_pm_control_plug:
-> This setting allows you to set the power control state for SATA ports on your system. 
+> This setting allows you to set the power management control state for SATA ports on your system. 
 > If enabled the system automatically adjusts the power state of the SATA ports based on the current usage and activity, optimizing for energy efficiency without significantly compromising performance.
 > If disabled the SATA ports are kept in their maximum power state to ensure maximum performance, regardless of usage or activity.
 > Please note that changes will take effect immediately and will apply to all SATA port detected by the system.
+> A system reboot is necessary for switching back to the default setting.
 > Warning: Be aware that changing this setting can affect system stability and performance. It is recommended to monitor the system after applying any changes and revert back if any undesirable behavior is observed.
 :end
 
 _(SATA Link Power Management)_:
 : <select name="SATA_LINK_PM">
-    <?=mk_option($cfg['SATA_LINK_PM'], "max_performance", "_(Performancce)_");?>
+    <?=mk_option($cfg['SATA_LINK_PM'], "max_performance", "_(Performance)_");?>
     <?=mk_option($cfg['SATA_LINK_PM'], "med_power_with_dipm", "_(Balanced)_");?>
     <?=mk_option($cfg['SATA_LINK_PM'], "min_power", "_(Powersave)_");?>
   </select>
@@ -167,9 +170,24 @@ _(Tweak Housekeeping)_:
 
 <div class="title"><span class="left"><i class="fa fa-cog title"></i>Advanced settings</span></div>
 
+_(NVME Power Management Policy)_:
+: <select name="NVME_APST_POLICY">
+    <?=mk_option($cfg['NVME_APST_POLICY'], "default", "_(OS Default)_");?>
+    <?=mk_option($cfg['NVME_APST_POLICY'], "performance", "_(Performance)_");?>
+    <?=mk_option($cfg['NVME_APST_POLICY'], "balanced", "_(Balanced)_");?>
+    <?=mk_option($cfg['NVME_APST_POLICY'], "powersave", "_(Power Save)_");?>
+    <?=mk_option($cfg['NVME_APST_POLICY'], "powersupersave", "_(Power Super Save)_");?>
+  </select>
+
+:autotweak_nvme_apst_policy_plug:
+> Select the power profile for your NVME drives. By selecting a profile, you can influence the balance between performance and power consumption according to your needs or preferences.
+> This setting updates the power management policy for all NVME drives on the system by updating the Autonomous Power State Transition (APST) table for each drive.
+> A system reboot is necessary for switching back to the default policy.
+:end
+
 _(NMI Watchdog)_:
 : <select name="KERNEL_NMI_WATCHDOG">
-    <?=mk_option($cfg['KERNEL_NMI_WATCHDOG'], "default", "_(Enable: Kernel Default)_");?>
+    <?=mk_option($cfg['KERNEL_NMI_WATCHDOG'], "default", "_(Enable: OS Default)_");?>
     <?=mk_option($cfg['KERNEL_NMI_WATCHDOG'], "off", "_(Disable)_");?>
   </select>
 
@@ -216,12 +234,12 @@ _(Preferred C states on Alder Lake CPUs)_:
 :autotweak_preferred_c_states_plug:
 > The C1 and C1E states on Alder Lake CPUs are mutually exclusive. Only one of them can be enabled at one time. By default the kernel disables C1 state.
 > This setting allows you to enable C1 state and disable C1E state. 
-> Please note that this adjustment directly alters the kernel boot parameters. A system reboot is necessary for the changes to take effect.
+> A system reboot is necessary for the changes to take effect.
 :end
 
 _(Security Mitigations)_:
 : <select name="KERNEL_MITIGATIONS">
-    <?=mk_option($cfg['KERNEL_MITIGATIONS'], "default", "_(Enable: Kernel Default)_");?>
+    <?=mk_option($cfg['KERNEL_MITIGATIONS'], "default", "_(Enable: OS Default)_");?>
     <?=mk_option($cfg['KERNEL_MITIGATIONS'], "off", "_(Disable)_");?>
   </select>
 
@@ -229,7 +247,7 @@ _(Security Mitigations)_:
 > This setting allows you to disable various CPU security mitigations that are in place to protect against known vulnerabilities such as Spectre and Meltdown.
 > While disabling these mitigations can improve system performance, it is important to understand that this may expose your CPU to potential security risks.
 > Use this option only if you are aware of the security implications and have measures in place to mitigate potential threats. 
-> Please note that this adjustment directly alters the kernel boot parameters. A system reboot is necessary for the changes to take effect.
+> A system reboot is necessary for the changes to take effect.
 :end
 
 _(PC10 Hack)_:
@@ -239,7 +257,7 @@ _(PC10 Hack)_:
   </select>
 
 :autotweak_pc10_ltr_hack_plug:
-> Activating this setting may or may not offer a potential solution to achieve PC10, its effectiveness is not guaranteed.
+> Activating this setting may or may not offer a potential solution to achieve PC10 on Intel platforms, its effectiveness is not guaranteed.
 > This setting should be your last resort after exhausting all other standard power-saving measures.
 > This setting is designed for users who have thoroughly explored and applied all standard power management settings, ensured Active State Power Management (ASPM) is functioning correctly,
 > and experimented with various BIOS configurations yet still find their system unable to achieve PC10 power state. 
@@ -293,5 +311,6 @@ foreach ($lines as $line) {
     echo $line . "<br>";
 }
 echo "</pre>";
+
 
 ?>
