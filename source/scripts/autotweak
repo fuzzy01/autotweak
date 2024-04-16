@@ -432,7 +432,7 @@ set_nvme_apst_policy() {
 
   done
 
-  nvme set-feature -f 0x0c --data="$output_file" -data-len=256 --value=1 /dev/nvme0 > /dev/null
+  nvme set-feature -f 0x0c --data="$output_file" -data-len=256 --value=1 /dev/"$nvme_device" > /dev/null
   ret=$?
 
   # Clean up temporary files
