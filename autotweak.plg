@@ -20,7 +20,7 @@
 
 ##&name;
 ###&version;
-- Add NMVE SSD power management policy feature. 
+- Add NVME SSD power management policy feature. 
 - Improve GUI field descriptions and consistency. 
 
 ###1.3.9
