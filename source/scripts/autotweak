@@ -1666,8 +1666,12 @@ unapply () {
   set_dynamic_boost 0
   set_aspm_policy "default"
 
+  set_sata_link_power_management "performance"
+
   restore_tcp
   restore_houskeeping
+  
+  remove_kernel_parameter "nmi_watchdog"
   remove_kernel_parameter "intel_idle.preferred_cstates"
   remove_kernel_parameter "mitigations"
 
