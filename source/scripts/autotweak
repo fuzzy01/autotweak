@@ -23,7 +23,7 @@ log() {
 
     # Log the message with the script's basename as the tag
     logger  -t "$(basename "$0")" "$message"
-    echo "$message"  > /dev/tty
+    # echo "$message"  > /dev/tty
 }
 
 #

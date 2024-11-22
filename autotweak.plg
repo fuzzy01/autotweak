@@ -20,6 +20,10 @@
 
 ##&name;
 ###&version;
+- Fix spelling.
+- Adds more cleanup to uninstall.
+
+###1.3.11
 - Add NVME SSD power management policy feature. 
 - Improve GUI field descriptions and consistency. 
 
