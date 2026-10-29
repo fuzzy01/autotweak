@@ -13,7 +13,7 @@
 # For the complete terms of the GNU General Public License, please see this URL:
 # http://www.gnu.org/licenses/gpl-3.0.html
 #
-# Copyright (c) 2024, Peter Laszlo
+# Copyright (c) 2024-2026, Peter Laszlo
 #
 
 plugin_version=${1:-$(date +%Y.%m.%d)}

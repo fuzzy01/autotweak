@@ -93,7 +93,7 @@ ln -sf /usr/local/emhttp/plugins/&name;/scripts/autotweak /usr/local/sbin 2>/dev
 echo ""
 echo "-----------------------------------------------------------"
 echo " Plugin &name; is installed."
-echo " Copyright 2024, &author;"
+echo " Copyright 2024-2026, &author;"
 echo " Version: &version;"
 echo "-----------------------------------------------------------"
 echo ""
