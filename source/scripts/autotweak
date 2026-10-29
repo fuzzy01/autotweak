@@ -818,7 +818,7 @@ validate_affinity_function_params() {
   fi
 
   if ! [[ $first_cpu =~ ^[0-9]+$ ]]; then
-    log_message "Error: first_cpu is not a valid number."
+    log "Error: first_cpu is not a valid number."
     return 1
   fi
 
