@@ -289,7 +289,7 @@ foreach ($lines as $line) {
       $line = preg_replace('/(ASPM_L1\S*+)/i', '<span style="color: green; font-weight: bold;">$1</span>', $line);      
       $line = preg_replace('/(ASPM_L1\S*-)/i', '<span style="color: red; font-weight: bold;">$1</span>', $line);      
     }
-    else if (preg_match('/^\s*LinkCtl:/i', $line)) {
+    else if (preg_match('/^\s*LnkCtl:/i', $line)) {
       $line = preg_replace('/(ASPM L1)(?=,)/i', '<span style="color: orange; font-weight: bold;">$1</span>', $line);
       $line = preg_replace('/(ASPM L0s L1)(?=,)/i', '<span style="color: orange; font-weight: bold;">$1</span>', $line);
       $line = preg_replace('/(ASPM not supported)/i', '<span style="color: red; font-weight: bold;">$1</span>', $line);
