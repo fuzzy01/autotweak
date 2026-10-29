@@ -20,6 +20,13 @@
 
 ##&name;
 ###&version;
+- Add Turbo and Dynamic Boost controls at the start of Advanced settings. Both default to enabled.
+- Disable TCP slow start after idle for 2.5GbE, 5GbE, and 10GbE. Disabling the TCP tweak turns slow start back on.
+- Raise 10GbE TCP autotune buffer limits to 64MB.
+- Fix RTL8125 interrupt affinity using the CPU count.
+- Fix ASPM status highlighting, including disabled L1 substates shown in red.
+- Fix Housekeeping help showing the TCP help text.
+- Fix the RTL8168/RTL8111 help text.
 - Fix spelling.
 - Adds more cleanup to uninstall.
 
