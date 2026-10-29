@@ -1156,7 +1156,8 @@ optimize_nic_interrupt_affinity() {
     local nic_driver=$(get_nic_driver "$interface_name")
     local nic_type=$(get_nic_type "$interface_name")
 
-    local ret
+    local ret status
+    local -a chosen_cpus
 
     # Set the NIC interrupt affinity using some heuristics  
     if [[ "$nic_driver" == "r8125" ]]; then
@@ -1165,21 +1166,26 @@ optimize_nic_interrupt_affinity() {
       else
         ret=$(set_rtl8125_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array_no_ban[@]}")
       fi
+      status=$?
     elif [[ "$nic_type" =~ Intel.* ]]; then
       if (( cpu_array_size >= 4 )); then
-        ret=$(set_intel_nic_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array[@]}")
+        chosen_cpus=("${cpu_array[@]}")
       else
-        ret=$(set_intel_nic_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array_no_ban[@]}")
+        chosen_cpus=("${cpu_array_no_ban[@]}")
       fi
-      if [ $? -ne 0 ]; then
-        # Retry with generic
-        ret=$(set_generic_nic_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array[@]}")
+      ret=$(set_intel_nic_interrupt_affinity "$interface_name" "$first_cpu" "${chosen_cpus[@]}")
+      status=$?
+      if [ "$status" -ne 0 ]; then
+        # Retry with generic, using the same CPU list as the Intel attempt
+        ret=$(set_generic_nic_interrupt_affinity "$interface_name" "$first_cpu" "${chosen_cpus[@]}")
+        status=$?
       fi
     else
       ret=$(set_generic_nic_interrupt_affinity "$interface_name" "$first_cpu" "${cpu_array[@]}")
+      status=$?
     fi
 
-    if [ $? -eq 0 ]; then
+    if [ "$status" -eq 0 ]; then
         first_cpu_map[$numa_node]=$ret  # Update first_cpu if there was no error
     fi
 
