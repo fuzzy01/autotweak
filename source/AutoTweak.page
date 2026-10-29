@@ -219,7 +219,7 @@ _(Realtek RTL8168/RTL8111 ASPM Control)_:
   </select>
 
 :autotweak_r8168_aspm_plug:
-> If you have installed the Realtek RTL8168/RTL1111 drivers, this setting allows you to enable or disable the ASPM (Active State Power Management) feature for the RTL8168/RTL1111 network interface cards in your system. 
+> If you have installed the Realtek RTL8168/RTL8111 drivers, this setting allows you to enable or disable the ASPM (Active State Power Management) feature for the RTL8168/RTL8111 network interface cards in your system. 
 > Selecting 'Enable' activates the ASPM feature, potentially reducing power consumption when the network activity is low.
 > A system reboot is necessary for the changes to take effect.
 :end
