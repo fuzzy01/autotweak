@@ -20,6 +20,8 @@
 
 ##&name;
 ###&version;
+- Fix Intel NIC interrupt affinity so the next card on the same NUMA node starts at the next CPU.
+- Apply the NVMe power policy to every controller, including nvme10 and later. Do nothing when no controller is present.
 - Add Turbo and Dynamic Boost controls at the start of Advanced settings. Both default to enabled.
 - Disable TCP slow start after idle for 2.5GbE, 5GbE, and 10GbE. Disabling the TCP tweak turns slow start back on.
 - Raise 10GbE TCP autotune buffer limits to 64MB.
