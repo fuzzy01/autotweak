@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name		"autotweak">
 <!ENTITY author		"fuzzy01">
-<!ENTITY version	"dev">
+<!ENTITY version	"2026.10.29">
 <!ENTITY launch		"Settings/AutoTweak">
 <!ENTITY pluginURL	"https://github.com/&author;/&name;/releases/latest/download/&name;.plg">
 <!ENTITY md5		"4d664b2c98daee944f449c1d86104980">

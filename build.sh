@@ -16,7 +16,7 @@
 # Copyright (c) 2024, Peter Laszlo
 #
 
-plugin_version=${1:-"dev"}
+plugin_version=${1:-$(date +%Y.%m.%d)}
 echo "Building version: $plugin_version"
 
 # Check the operating system
