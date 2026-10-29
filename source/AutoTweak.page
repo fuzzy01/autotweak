@@ -161,7 +161,7 @@ _(Tweak Housekeeping)_:
     <?=mk_option($cfg['TWEAK_HK'], "disable", "_(Disable)_");?>
   </select>
 
-:autotweak_tweak_tcp_plug:
+:autotweak_tweak_hk_plug:
 > This setting allows you to enable or disable the Housekeeping optimization feature. 
 > If enabled offloads kernel housekeeping task (RCU callbacks) from interrupts into threads.
 > It also moves all interrupt processing on to E-cores on Hybrid CPUs. This step aims to ensure that housekeeping tasks do not interfere excessively with the performance cores.
