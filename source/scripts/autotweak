@@ -1242,7 +1242,9 @@ optimize_tcp() {
       sysctl -w net.core.wmem_max=33554432  > /dev/null
       # Increasing the Linux autotuning TCP buffer limits to 32MB
       sysctl -w net.ipv4.tcp_rmem="4096 87380 33554432" > /dev/null
-      sysctl -w net.ipv4.tcp_wmem="4096 65536 33554432" > /dev/null 
+      sysctl -w net.ipv4.tcp_wmem="4096 65536 33554432" > /dev/null
+      # Disable slow start
+      sysctl -w net.ipv4.tcp_slow_start_after_idle=0 > /dev/null
       ;;
     5000)
       # Setting maximum TCP read and write buffer sizes to 32MB
@@ -1250,15 +1252,17 @@ optimize_tcp() {
       sysctl -w net.core.wmem_max=33554432  > /dev/null
       # Increasing the Linux autotuning TCP buffer limits to 32MB
       sysctl -w net.ipv4.tcp_rmem="4096 87380 33554432" > /dev/null
-      sysctl -w net.ipv4.tcp_wmem="4096 65536 33554432" > /dev/null 
+      sysctl -w net.ipv4.tcp_wmem="4096 65536 33554432" > /dev/null
+      # Disable slow start
+      sysctl -w net.ipv4.tcp_slow_start_after_idle=0 > /dev/null
       ;;
     10000)
       # Setting maximum TCP read and write buffer sizes to 64MB
       sysctl -w net.core.rmem_max=67108864 > /dev/null
       sysctl -w net.core.wmem_max=67108864 > /dev/null
-      # Increasing the Linux autotuning TCP buffer limits to 32MB
-      sysctl -w net.ipv4.tcp_rmem="4096 87380 33554432" > /dev/null
-      sysctl -w net.ipv4.tcp_wmem="4096 65536 33554432" > /dev/null 
+      # Increasing the Linux autotuning TCP buffer limits to 64MB
+      sysctl -w net.ipv4.tcp_rmem="4096 87380 67108864" > /dev/null
+      sysctl -w net.ipv4.tcp_wmem="4096 65536 67108864" > /dev/null 
       # Disable slow start
       sysctl -w net.ipv4.tcp_slow_start_after_idle=0 > /dev/null   
       ;;
@@ -1280,9 +1284,10 @@ restore_tcp() {
   sysctl -w net.ipv4.tcp_rmem="4096 87380 33554432" > /dev/null
   sysctl -w net.ipv4.tcp_wmem="4096 65536 33554432" > /dev/null
   sysctl -w net.ipv4.tcp_mtu_probing=0 > /dev/null
- 
+  sysctl -w net.ipv4.tcp_slow_start_after_idle=1 > /dev/null
+
   log "Restored TCP parameters"
- }
+}
 
 #
 # Kernel parameter functions
