@@ -1595,9 +1595,18 @@ apply () {
       set_cpu_performance_preference "power"
   esac
 
-  set_dynamic_boost 1
-  set_no_turbo 0
-  
+  if [ "$TURBO" = "disable" ]; then
+    set_no_turbo 1
+  else
+    set_no_turbo 0
+  fi
+
+  if [ "$DYNAMIC_BOOST" = "disable" ]; then
+    set_dynamic_boost 0
+  else
+    set_dynamic_boost 1
+  fi
+
   set_aspm_policy "$ASPM_POLICY"
 
   if [ "$PCI_PM_CONTROL" != "default" ]; then
@@ -1669,6 +1678,7 @@ unapply () {
   set_scaling_governor "performance"
   set_cpu_performance_preference "performance"
   set_dynamic_boost 0
+  set_no_turbo 0
   set_aspm_policy "default"
 
   set_sata_link_power_management "performance"

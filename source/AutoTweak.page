@@ -170,6 +170,28 @@ _(Tweak Housekeeping)_:
 
 <div class="title"><span class="left"><i class="fa fa-cog title"></i>Advanced settings</span></div>
 
+_(Turbo)_:
+: <select name="TURBO">
+    <?=mk_option($cfg['TURBO'], "enable", "_(Enable)_");?>
+    <?=mk_option($cfg['TURBO'], "disable", "_(Disable)_");?>
+  </select>
+
+:autotweak_turbo_plug:
+> Enable or disable CPU turbo. Disable keeps the CPU at its base frequency.
+> CPUs without a turbo control are left unchanged.
+:end
+
+_(Dynamic Boost)_:
+: <select name="DYNAMIC_BOOST">
+    <?=mk_option($cfg['DYNAMIC_BOOST'], "enable", "_(Enable)_");?>
+    <?=mk_option($cfg['DYNAMIC_BOOST'], "disable", "_(Disable)_");?>
+  </select>
+
+:autotweak_dynamic_boost_plug:
+> Enable or disable Intel HWP dynamic boost, or AMD CPPC dynamic boost when the CPU provides it.
+> CPUs without this control are left unchanged.
+:end
+
 _(NVME Power Management Policy)_:
 : <select name="NVME_APST_POLICY">
     <?=mk_option($cfg['NVME_APST_POLICY'], "default", "_(OS Default)_");?>
