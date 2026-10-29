@@ -1123,7 +1123,7 @@ optimize_nic_interrupt_affinity() {
   # Get efficent CPUs
   local -a e_cpu_array=($(expand_cpulist "$(get_efficient_cpus)"))
   local e_cpu_array_size=${#e_cpu_array[@]}
-  local max_cpu=$(get_highest_cpu_number + 1)
+  local max_cpu=$(($(get_highest_cpu_number) + 1))
 
   # Only take into account banned devices if there are at least 4 efficent CPUs
   if (( e_cpu_array_size >= 4 )); then  
