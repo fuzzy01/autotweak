@@ -333,8 +333,14 @@ set_all_nvme_apst_policy() {
 
   local policy="$1"
 
-  for nvme_device in /dev/nvme?; do
+  for nvme_device in /dev/nvme[0-9]*; do
+    if [[ ! -e "$nvme_device" ]]; then
+      continue
+    fi
     local device=$(basename "$nvme_device")
+    if [[ ! "$device" =~ ^nvme[0-9]+$ ]]; then
+      continue
+    fi
     set_nvme_apst_policy "$device" "$policy"
   done
 }
