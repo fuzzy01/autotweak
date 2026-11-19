@@ -1325,13 +1325,18 @@ set_kernel_parameter() {
         return 1
     fi
 
-    # Use awk to either add or update the parameter in the kernel line
+    # Use awk to either add or update the parameter in the kernel line.
+    # syslinux.cfg may use CRLF line endings (Unraid's Boot Parameters page
+    # saves it that way). Edit the kernel line without its CR and put the
+    # line ending back afterwards, so the parameter lands before the CR.
     awk -v paramName="$paramName" -v paramValue="$paramValue" '
     /label Unraid OS/ {
+        cr = ($0 ~ /\r$/) ? "\r" : "";  # Line ending used by this file
         print;  # Print the "label" line
         getline; print;  # Print the "menu" line
         getline;  # Process the "kernel" line
         if ($1 == "kernel") {
+            gsub(/\r/, "");
             # Check if parameter is already in the line
             if (index($0, paramName "=") > 0) {
                 # Parameter exists, replace its value
@@ -1340,7 +1345,7 @@ set_kernel_parameter() {
                 # Parameter doesnt exist, append it
                 $0 = $0 " " paramName "=" paramValue;
             }
-            print;
+            print $0 cr;
         } else {
             print;
         }
@@ -1351,11 +1356,21 @@ set_kernel_parameter() {
 
     # Check if changes were made. If so, update the configFile.
     if ! cmp --silent "$tempFile" "$configFile"; then
-        log "Added kernel boot parameter: $paramName=$paramValue"
-        mv "$tempFile" "$configFile"
+        if mv "$tempFile" "$configFile"; then
+            log "Set kernel boot parameter in syslinux.cfg: $paramName=$paramValue, active after reboot"
+        else
+            log "Failed to write $configFile, kernel boot parameter not set: $paramName=$paramValue"
+            rm -f "$tempFile"
+            return 1
+        fi
     else
-        log "Kernel boot parameter is already set: $paramName=$paramValue"
         rm "$tempFile"  # No change, so remove the temporary file
+        # The file already has it. Only call it active if the running kernel got it.
+        if [[ " $(cat /proc/cmdline 2>/dev/null) " == *" $paramName=$paramValue "* ]]; then
+            log "Kernel boot parameter is already set: $paramName=$paramValue"
+        else
+            log "Kernel boot parameter is set in syslinux.cfg, active after reboot: $paramName=$paramValue"
+        fi
     fi
 }
 
@@ -1381,14 +1396,18 @@ remove_kernel_parameter() {
     # Use awk to either add or update the parameter in the kernel line
     awk -v paramName="$paramName" -v paramValue="$paramValue" '
     /label Unraid OS/ {
+        cr = ($0 ~ /\r$/) ? "\r" : "";  # Line ending used by this file
         print;  # Print the "label" line
         getline; print;  # Print the "menu" line
         getline;  # Process the "kernel" line
         if ($1 == "kernel") {
             # Check if parameter is in the line
             if (index($0, paramName "=") > 0) {
-                # Parameter exists, remove it
+                # Parameter exists, remove it. Strip CR first so the
+                # removal cannot take the line ending with it.
+                gsub(/\r/, "");
                 gsub(" " paramName "=[^ ]+", "");
+                $0 = $0 cr;
             }
             print;
         } else {
