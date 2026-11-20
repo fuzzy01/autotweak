@@ -849,6 +849,32 @@ validate_affinity_function_params() {
   return 0
 }
 
+# Write a value to a /proc or /sys file. A failed write is logged instead of
+# being printed on the console, and the caller gets the exit status.
+write_value() {
+  local value=$1
+  local file=$2
+  local err
+
+  if ! err=$({ printf '%s' "$value" > "$file"; } 2>&1); then
+    log "Could not write $value to $file: ${err##*: }"
+    return 1
+  fi
+  return 0
+}
+
+# Number of tx queues of a network interface
+get_tx_queue_count() {
+  local interface=$1
+  local -a tx_queues=(/sys/class/net/"$interface"/queues/tx-*)
+
+  if [ -d "${tx_queues[0]}" ]; then
+    echo "${#tx_queues[@]}"
+  else
+    echo 0
+  fi
+}
+
 # Set the CPU affinity for a specific interrupt and rx/tx queue
 set_nic_interrupt_affinity() {
   local interface=$1
@@ -856,8 +882,22 @@ set_nic_interrupt_affinity() {
   local queue_num=$3
   local cpu=$4
 
-  echo $cpu > /proc/irq/"$irq"/smp_affinity_list
-  printf "%x" $((1 << $cpu)) > /sys/class/net/"$interface"/queues/tx-$queue_num/xps_cpus
+  if ! write_value "$cpu" /proc/irq/"$irq"/smp_affinity_list; then
+    return 1
+  fi
+
+  # The kernel refuses xps_cpus writes (ENOENT) on a device with a single tx
+  # queue, even though the file exists, as there is nothing to steer.
+  if [ "$(get_tx_queue_count "$interface")" -lt 2 ]; then
+    log "Set CPU affinity of interrupt $irq of $interface to CPU $cpu (single tx queue, xps_cpus not applicable)"
+    return 0
+  fi
+
+  local cpu_mask_hex
+  printf -v cpu_mask_hex "%x" $((1 << cpu))
+  if ! write_value "$cpu_mask_hex" /sys/class/net/"$interface"/queues/tx-$queue_num/xps_cpus; then
+    return 1
+  fi
   log "Set CPU affinity of interrupt $irq and tx queue $queue_num of $interface to CPU $cpu"
 }
 
@@ -924,8 +964,9 @@ set_rtl8125_interrupt_affinity() {
       break
     fi
 
-    echo ${cpu_array[$current_cpu_index]} > /proc/irq/"$irq"/smp_affinity_list
-    log "Set CPU affinity of interrupt $irq and rx queue $queue_num of $interface to CPU ${cpu_array[$current_cpu_index]}"
+    if write_value "${cpu_array[$current_cpu_index]}" /proc/irq/"$irq"/smp_affinity_list; then
+      log "Set CPU affinity of interrupt $irq and rx queue $queue_num of $interface to CPU ${cpu_array[$current_cpu_index]}"
+    fi
 
     queue_num=$((queue_num + 1))
 
@@ -959,9 +1000,14 @@ set_rtl8125_interrupt_affinity() {
     done
     local cpu_mask_hex=$(printf "%x" $cpu_mask)
     
-    echo $cpu_mask_hex > /proc/irq/"$irq"/smp_affinity
-    echo $cpu_mask_hex > /sys/class/net/"$interface"/queues/tx-$queue_num/xps_cpus
-    log "Set CPU affinity of interrupt $irq and tx queue $queue_num of $interface to CPU $cpu_str"
+    if write_value "$cpu_mask_hex" /proc/irq/"$irq"/smp_affinity; then
+      # A device with a single tx queue refuses xps_cpus writes (ENOENT)
+      if [ "$tx_queue_count" -lt 2 ]; then
+        log "Set CPU affinity of interrupt $irq of $interface to CPU $cpu_str (single tx queue, xps_cpus not applicable)"
+      elif write_value "$cpu_mask_hex" /sys/class/net/"$interface"/queues/tx-$queue_num/xps_cpus; then
+        log "Set CPU affinity of interrupt $irq and tx queue $queue_num of $interface to CPU $cpu_str"
+      fi
+    fi
 
     queue_num=$((queue_num + 1))
   done
