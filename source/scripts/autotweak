@@ -333,6 +333,15 @@ set_all_nvme_apst_policy() {
 
   local policy="$1"
 
+  # nvme_core.default_ps_max_latency_us=0 on the kernel command line turns APST
+  # off for every controller (Unraid: "Disable NVMe Deep Power States" on the
+  # Boot Parameters page). Do not switch it back on behind the user's back.
+  local max_latency_file="/sys/module/nvme_core/parameters/default_ps_max_latency_us"
+  if [ -r "$max_latency_file" ] && [ "$(cat "$max_latency_file")" = "0" ]; then
+    log "NVMe APST is disabled by nvme_core.default_ps_max_latency_us=0, not applying NVMe policy $policy"
+    return 0
+  fi
+
   for nvme_device in /dev/nvme[0-9]*; do
     if [[ ! -e "$nvme_device" ]]; then
       continue
@@ -365,17 +374,26 @@ set_nvme_apst_policy() {
   local input_file=$(mktemp)
   local output_file=$(mktemp)
 
-  nvme get-feature -f 0x0c --raw-binary  /dev/"$nvme_device" > "$input_file"
-  if [ $? -ne 0 ]; then
-    log "nvme get-feature failed on $nvme_device"
-    # Clean up temporary files
-    rm -f "$input_file"
-    rm -f "$output_file"
-    return 1
+  # Read the 256-byte APST table. nvme-cli 3.x ignores --raw-binary for
+  # get-feature and prints a hex dump; it needs "-o binary" for raw bytes.
+  # nvme-cli 2.x uses --raw-binary. Pass both, and fall back to --raw-binary
+  # alone for versions that do not know "-o binary".
+  local filesize=0
+  if nvme get-feature -f 0x0c --raw-binary -o binary /dev/"$nvme_device" > "$input_file" 2>/dev/null; then
+    filesize=$(stat -c %s "$input_file")
+  fi
+  if [ "$filesize" -ne 256 ]; then
+    if ! nvme get-feature -f 0x0c --raw-binary /dev/"$nvme_device" > "$input_file"; then
+      log "nvme get-feature failed on $nvme_device"
+      # Clean up temporary files
+      rm -f "$input_file"
+      rm -f "$output_file"
+      return 1
+    fi
+    filesize=$(stat -c %s "$input_file")
   fi
 
-  filesize=$(stat -c %s "$input_file")
-  if [ $filesize -ne 256 ]; then
+  if [ "$filesize" -ne 256 ]; then
     log "APST table has unexpected size: $filesize on $nvme_device"
     # Clean up temporary files
     rm -f "$input_file"
