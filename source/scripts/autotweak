@@ -493,10 +493,14 @@ set_sata_power_control() {
     
     local ata_device=$(basename "$ata_device_dir")
     local ata_control_file="${ata_device_dir}/power/control"
+    local err
 
     if [ -w "$ata_control_file" ]; then
-      echo "$control_state" > "$ata_control_file"
-      log "PM control set to '$control_state' for ata device $ata_device"
+      if err=$({ echo "$control_state" > "$ata_control_file"; } 2>&1); then
+        log "PM control set to '$control_state' for ata device $ata_device"
+      else
+        log "Failed to set PM control to '$control_state' for ata device $ata_device: $err"
+      fi
     else
       log "Cannot write to $ata_control_file, might require root privileges"
       continue
@@ -514,22 +518,38 @@ set_sata_link_power_management() {
     return 1
   fi
 
+  local -a skipped=()
+
   # Iterate over each SCSI host and set the power management policy
   for dir in /sys/class/scsi_host/host*/; do
     local host_id=$(basename "$dir")
     local policy_file="${dir}link_power_management_policy"
+    local err
 
     if [[ ! -f "$policy_file" ]]; then
       continue
     fi
 
     if [[ -w "$policy_file" ]]; then
-      echo "$policy" > "$policy_file"
-      log "Set SATA link power management to $policy for ${host_id}"
+      # Newer kernels tell us up front when a port cannot do link power management
+      local supported_file="${dir}link_power_management_supported"
+      if [[ -r "$supported_file" && "$(<"$supported_file")" == "0" ]]; then
+        skipped+=("$host_id")
+        continue
+      fi
+      if err=$({ echo "$policy" > "$policy_file"; } 2>&1); then
+        log "Set SATA link power management to $policy for ${host_id}"
+      else
+        log "Failed to set SATA link power management to $policy for ${host_id}: $err"
+      fi
     else
-      echo "Cannot write to $policy_file - might require root privileges"
+      log "Cannot write to $policy_file - might require root privileges"
     fi
   done
+
+  if (( ${#skipped[@]} > 0 )); then
+    log "SATA link power management not supported on ${skipped[*]} (skipped ${#skipped[@]})"
+  fi
 }
 
 pc10_ltr_hack() {
