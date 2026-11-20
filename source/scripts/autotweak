@@ -1693,7 +1693,7 @@ unapply () {
   set_no_turbo 0
   set_aspm_policy "default"
 
-  set_sata_link_power_management "performance"
+  set_sata_link_power_management "max_performance"
 
   restore_tcp
   restore_houskeeping
