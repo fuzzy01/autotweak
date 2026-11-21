@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name		"autotweak">
 <!ENTITY author		"fuzzy01">
-<!ENTITY version	"2026.10.29">
+<!ENTITY version	"2026.11.21">
 <!ENTITY launch		"Settings/AutoTweak">
 <!ENTITY pluginURL	"https://github.com/&author;/&name;/releases/latest/download/&name;.plg">
 <!ENTITY md5		"4d664b2c98daee944f449c1d86104980">
@@ -20,6 +20,13 @@
 
 ##&name;
 ###&version;
+- Fix the NVMe power policy on nvme-cli 3.x. Leave it off when NVMe deep power states are disabled at boot.
+- Apply kernel boot options when syslinux.cfg has CRLF line endings. They take effect after a reboot.
+- Skip transmit-queue steering on single-queue NICs, and log affinity writes that fail.
+- Skip SATA link power management on ports that do not support it, and log failed SATA power writes.
+- On uninstall, reset SATA link power management to max performance.
+
+###2026.10.29
 - Fix Intel NIC interrupt affinity so the next card on the same NUMA node starts at the next CPU.
 - Apply the NVMe power policy to every controller, including nvme10 and later. Do nothing when no controller is present.
 - Add Turbo and Dynamic Boost controls at the start of Advanced settings. Both default to enabled.
