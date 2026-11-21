@@ -326,7 +326,7 @@ set_pci_power_control() {
 
 set_all_nvme_apst_policy() {
   if [ $# -lt 1 ]; then
-    echo "Usage: set_all_nvme_power_management [nmme_device] [policy]"
+    echo "Usage: set_all_nvme_apst_policy [policy]"
     echo "policy: 'performance', 'balanced', 'powersave' or 'powersupersave'"
     return 1
   fi
@@ -336,139 +336,73 @@ set_all_nvme_apst_policy() {
   # nvme_core.default_ps_max_latency_us=0 on the kernel command line turns APST
   # off for every controller (Unraid: "Disable NVMe Deep Power States" on the
   # Boot Parameters page). Do not switch it back on behind the user's back.
-  local max_latency_file="/sys/module/nvme_core/parameters/default_ps_max_latency_us"
-  if [ -r "$max_latency_file" ] && [ "$(cat "$max_latency_file")" = "0" ]; then
+  local params="/sys/module/nvme_core/parameters"
+  if [ -r "$params/default_ps_max_latency_us" ] && [ "$(cat "$params/default_ps_max_latency_us")" = "0" ]; then
     log "NVMe APST is disabled by nvme_core.default_ps_max_latency_us=0, not applying NVMe policy $policy"
     return 0
   fi
 
-  for nvme_device in /dev/nvme[0-9]*; do
-    if [[ ! -e "$nvme_device" ]]; then
-      continue
-    fi
-    local device=$(basename "$nvme_device")
-    if [[ ! "$device" =~ ^nvme[0-9]+$ ]]; then
-      continue
-    fi
-    set_nvme_apst_policy "$device" "$policy"
-  done
-}
-
-set_nvme_apst_policy() {
-  if [ $# -lt 2 ]; then
-    echo "Usage: set_nvme_power_management [nmme_device] [policy]"
-    echo "nvme_device: nvme device (e.g., nvme0)"
-    echo "policy: 'performance', 'balanced', 'powersave' or 'powersupersave'"
-    return 1
-  fi
-
-  local nvme_device="$1"
-  local policy="$2"
-
-  # Check if the provided policy is valid
-  if [[ ! "$policy" =~ ^(performance|balanced|powersave|powersupersave)$ ]]; then
-    echo "Error: invalid policy: $policy. Available policies: performance, balanced, powersave, powersupersave"
-    return 1
-  fi
-
-  local input_file=$(mktemp)
-  local output_file=$(mktemp)
-
-  # Read the 256-byte APST table. nvme-cli 3.x ignores --raw-binary for
-  # get-feature and prints a hex dump; it needs "-o binary" for raw bytes.
-  # nvme-cli 2.x uses --raw-binary. Pass both, and fall back to --raw-binary
-  # alone for versions that do not know "-o binary".
-  local filesize=0
-  if nvme get-feature -f 0x0c --raw-binary -o binary /dev/"$nvme_device" > "$input_file" 2>/dev/null; then
-    filesize=$(stat -c %s "$input_file")
-  fi
-  if [ "$filesize" -ne 256 ]; then
-    if ! nvme get-feature -f 0x0c --raw-binary /dev/"$nvme_device" > "$input_file"; then
-      log "nvme get-feature failed on $nvme_device"
-      # Clean up temporary files
-      rm -f "$input_file"
-      rm -f "$output_file"
+  # Idle time in ms before a drive enters its first non-operational power
+  # state (primary) and its deepest allowed one (secondary).
+  local primary secondary
+  case "$policy" in
+    performance)    primary=20000; secondary=20000 ;;
+    balanced)       primary=200;   secondary=2000 ;;
+    powersave)      primary=100;   secondary=1000 ;;
+    powersupersave) primary=50;    secondary=500 ;;
+    *)
+      log "Invalid NVMe APST policy: $policy"
       return 1
-    fi
-    filesize=$(stat -c %s "$input_file")
-  fi
+      ;;
+  esac
 
-  if [ "$filesize" -ne 256 ]; then
-    log "APST table has unexpected size: $filesize on $nvme_device"
-    # Clean up temporary files
-    rm -f "$input_file"
-    rm -f "$output_file"
+  # The kernel owns the APST table. Since Linux commit 4b59f93 ("nvme: reject
+  # passthrough of driver-managed Set Features", in 6.18.58 and later) it
+  # refuses an APST table sent from user space with EACCES, even from root, so
+  # "nvme set-feature -f 0x0c" can no longer change it. The kernel builds the
+  # table itself from the nvme_core apst_* timeouts, so set those instead.
+  # They are only used while apst_primary_latency_tol_us is not 0; with 0 the
+  # kernel falls back to its own 2% heuristic (nvme_configure_apst).
+  if [ ! -w "$params/apst_primary_timeout_ms" ] || [ ! -w "$params/apst_secondary_timeout_ms" ]; then
+    log "Cannot set NVMe APST policy $policy: this kernel has no writable $params/apst_primary_timeout_ms"
+    return 1
+  fi
+  if [ "$(cat "$params/apst_primary_latency_tol_us" 2>/dev/null)" = "0" ]; then
+    log "Cannot set NVMe APST policy $policy: nvme_core.apst_primary_latency_tol_us is 0, so the kernel ignores the APST timeouts"
+    return 1
+  fi
+  if ! echo "$primary" > "$params/apst_primary_timeout_ms" || ! echo "$secondary" > "$params/apst_secondary_timeout_ms"; then
+    log "Cannot write the NVMe APST timeouts to $params"
     return 1
   fi
 
-  # Read and process the APST table, set new timeouts based on the policy
-  for (( i = 0; i < 32; i++ )); do
-    # Read a 64-bit (8 bytes) integer from the table
-    local value=$(od -j $((i * 8)) -N 8 -An -t u8 -v "$input_file")
-    value=$(echo $value)
-    local timeout_ms=$((value >> 8)) 
-    local state=$(((value & 0xff) >> 3))
-
-    # echo "$i State: $state Timeout: $timeout_ms"
-
-    # Only modify used rows. And only modify the timeout value.
-    if (( state != 0 )); then
-      if (( i==0 || i==1 || i==2)); then
-        # For operative states
-        case "$policy" in
-          performance)
-            timeout_ms=20000
-            ;;
-          balanced)
-            timeout_ms=200
-            ;;
-          powersave)
-            timeout_ms=100
-            ;;
-          powersupersave)
-            timeout_ms=50
-            ;;
-        esac
-      else
-        # For non-operative states
-        case "$policy" in
-          performance)
-            timeout_ms=20000
-            ;;
-          balanced)
-            timeout_ms=2000
-            ;;
-          powersave)
-            timeout_ms=1000
-            ;;
-          powersupersave)
-            timeout_ms=500
-            ;;
-        esac
-      fi
-      log "Set $nvme_device APST table entry $i Next state: $state Timeout: $timeout_ms"
+  # The kernel rebuilds a controller's table only when its PM QoS latency
+  # tolerance changes (nvme_set_latency_tolerance), so step it to another value
+  # and back. The value itself stays what it was.
+  local ctrl
+  for ctrl in /sys/class/nvme/nvme[0-9]*; do
+    [ -e "$ctrl" ] || continue
+    local name
+    name=$(basename "$ctrl")
+    [[ "$name" =~ ^nvme[0-9]+$ ]] || continue
+    local qos="$ctrl/power/pm_qos_latency_tolerance_us"
+    local old
+    if ! old=$(cat "$qos" 2>/dev/null) || [ -z "$old" ]; then
+      log "Cannot read $qos, NVMe APST policy not applied to $name"
+      continue
     fi
-
-    value=$((state << 3 | timeout_ms << 8))
-
-    # script hell...
-    printf "%016x" $value | sed 's/\(.\)\(.\)/\2\1/g' | rev | sed 's/../\\\\x&/g' |  xargs echo -en >> "$output_file"
-
+    local step=1
+    if [[ "$old" =~ ^[0-9]+$ ]] && (( old > 1 )); then
+      step=$((old - 1))
+    elif [ "$old" = "1" ]; then
+      step=2
+    fi
+    if echo "$step" > "$qos" && echo "$old" > "$qos"; then
+      log "Set $name APST policy to $policy (idle $primary ms, then $secondary ms)"
+    else
+      log "Cannot write $qos, NVMe APST policy not applied to $name"
+    fi
   done
-
-  nvme set-feature -f 0x0c --data="$output_file" -data-len=256 --value=1 /dev/"$nvme_device" > /dev/null
-  ret=$?
-
-  # Clean up temporary files
-  rm -f "$input_file"
-  rm -f "$output_file"
-
-  if [ $ret -ne 0 ]; then
-    log "nvme set-feature failed on $nvme_device"
-    return 1
-  fi
-
-  log "Set $nvme_device APST policy to $policy"
 }
 
 set_sata_power_control() {

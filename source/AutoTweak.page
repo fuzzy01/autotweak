@@ -203,7 +203,8 @@ _(NVME Power Management Policy)_:
 
 :autotweak_nvme_apst_policy_plug:
 > Select the power profile for your NVME drives. By selecting a profile, you can influence the balance between performance and power consumption according to your needs or preferences.
-> This setting updates the power management policy for all NVME drives on the system by updating the Autonomous Power State Transition (APST) table for each drive.
+> This setting updates the power management policy for all NVME drives on the system. It sets how long a drive stays idle before the Linux kernel moves it to a low-power state (Autonomous Power State Transition, APST), and the kernel rebuilds the APST table of each drive with these times.
+> Example: Balanced waits 200 ms before the first low-power state and 2000 ms before the deepest; Performance waits 20 seconds for both.
 > A system reboot is necessary for switching back to the default policy.
 :end
 
