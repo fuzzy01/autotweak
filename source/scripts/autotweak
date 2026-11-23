@@ -371,8 +371,17 @@ set_all_nvme_apst_policy() {
     log "Cannot set NVMe APST policy $policy: nvme_core.apst_primary_latency_tol_us is 0, so the kernel ignores the APST timeouts"
     return 1
   fi
-  if ! echo "$primary" > "$params/apst_primary_timeout_ms" || ! echo "$secondary" > "$params/apst_secondary_timeout_ms"; then
-    log "Cannot write the NVMe APST timeouts to $params"
+  set_nvme_apst_timeouts "$policy" "$primary" "$secondary"
+}
+
+# Write the nvme_core APST timeouts and make the kernel rebuild the APST table
+# of every NVMe controller with them. $1 names the policy in the log.
+set_nvme_apst_timeouts() {
+  local label=$1 primary=$2 secondary=$3
+  local params="/sys/module/nvme_core/parameters"
+
+  if ! write_value "$primary" "$params/apst_primary_timeout_ms" || ! write_value "$secondary" "$params/apst_secondary_timeout_ms"; then
+    log "Cannot write the NVMe APST timeouts to $params, NVMe APST policy $label not applied"
     return 1
   fi
 
@@ -388,7 +397,13 @@ set_all_nvme_apst_policy() {
     local qos="$ctrl/power/pm_qos_latency_tolerance_us"
     local old
     if ! old=$(cat "$qos" 2>/dev/null) || [ -z "$old" ]; then
-      log "Cannot read $qos, NVMe APST policy not applied to $name"
+      log "Cannot read $qos, NVMe APST policy $label not applied to $name"
+      continue
+    fi
+    # A tolerance of 0 us allows no power state with any exit latency, so APST
+    # stays off for this controller whatever the timeouts are.
+    if [ "$old" = "0" ]; then
+      log "Skipped $name: its PM QoS latency tolerance is 0, so APST is off for it"
       continue
     fi
     local step=1
@@ -397,12 +412,37 @@ set_all_nvme_apst_policy() {
     elif [ "$old" = "1" ]; then
       step=2
     fi
-    if echo "$step" > "$qos" && echo "$old" > "$qos"; then
-      log "Set $name APST policy to $policy (idle $primary ms, then $secondary ms)"
+    if write_value "$step" "$qos" && write_value "$old" "$qos"; then
+      log "Set $name APST policy to $label (idle $primary ms, then $secondary ms)"
     else
-      log "Cannot write $qos, NVMe APST policy not applied to $name"
+      log "Cannot write $qos, NVMe APST policy $label not applied to $name"
     fi
   done
+}
+
+# Put the nvme_core APST timeouts back to their boot values: the ones given on
+# the kernel command line, else the kernel's defaults of 100 ms and 2000 ms
+# (apst_primary_timeout_ms and apst_secondary_timeout_ms in
+# drivers/nvme/host/core.c). Does nothing when they already have those values.
+restore_nvme_apst_default() {
+  local params="/sys/module/nvme_core/parameters"
+  [ -r "$params/default_ps_max_latency_us" ] && [ "$(cat "$params/default_ps_max_latency_us")" = "0" ] && return 0
+  [ -w "$params/apst_primary_timeout_ms" ] && [ -w "$params/apst_secondary_timeout_ms" ] || return 0
+
+  local primary=100 secondary=2000 arg
+  local -a cmdline=()
+  read -r -a cmdline < /proc/cmdline
+  for arg in "${cmdline[@]}"; do
+    case "$arg" in
+      nvme_core.apst_primary_timeout_ms=*)   primary=${arg#*=} ;;
+      nvme_core.apst_secondary_timeout_ms=*) secondary=${arg#*=} ;;
+    esac
+  done
+
+  if [ "$(cat "$params/apst_primary_timeout_ms")" = "$primary" ] && [ "$(cat "$params/apst_secondary_timeout_ms")" = "$secondary" ]; then
+    return 0
+  fi
+  set_nvme_apst_timeouts "OS Default" "$primary" "$secondary"
 }
 
 set_sata_power_control() {
@@ -1670,6 +1710,8 @@ apply () {
 
   if [ "$NVME_APST_POLICY" != "default" ]; then
     set_all_nvme_apst_policy "$NVME_APST_POLICY"
+  else
+    restore_nvme_apst_default
   fi
 
   if lsmod | grep -q "r8125"; then
@@ -1731,6 +1773,7 @@ unapply () {
   set_aspm_policy "default"
 
   set_sata_link_power_management "max_performance"
+  restore_nvme_apst_default
 
   restore_tcp
   restore_houskeeping
